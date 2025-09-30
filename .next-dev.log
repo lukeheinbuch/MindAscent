@@ -1,0 +1,10 @@
+
+> mindascent@1.0.0 dev
+> next dev --turbo -p 3001
+
+  ▲ Next.js 14.2.31 (turbo)
+  - Local:        http://localhost:3001
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 990ms

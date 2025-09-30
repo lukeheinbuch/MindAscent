@@ -1,0 +1,16 @@
+{
+  "typescript.tsserver.log": "off",
+  "typescript.tsserver.maxTsServerMemory": 3072,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+  "typescript.disableAutomaticTypeAcquisition": true,
+  "typescript.preferences.includePackageJsonAutoImports": "off",
+  "css.lint.unknownAtRules": "ignore",
+  "css.lint.unknownProperties": "ignore",
+  "css.lint.validProperties": [
+    "-webkit-user-select",
+    "-moz-user-select",
+    "-ms-user-select",
+    "user-select"
+  ]
+}

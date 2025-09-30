@@ -1,0 +1,386 @@
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { motion } from 'framer-motion';
+import { CheckSquare, Save, ArrowRight } f                <CustomSlider
+                  label="How stressed are you feeling?"
+                  value={formData.stress}
+                  onChange={handleSliderChange('stress')}
+                  min={1}
+                  max={5}
+                  icons={['smile', 'smile', 'meh', 'frown', 'frown']}
+                  color="orange"
+                />de-react';
+import Layout from '@/components/Layout';
+import CustomSlider from '@/components/CustomSlider';
+import ExerciseRecommendations from '@/components/ExerciseRecommendations';
+import Loading from '@/components/Loading';
+import { useAuth } from '@/contexts/AuthContext';
+import { CheckInService } from '@/services/checkIn';
+import { CheckInFormData, CheckInData, Exercise } from '@/types';
+import { getMoodEmoji, getStressEmoji, getEnergyEmoji, getMotivationEmoji } from '@/utils';
+
+const CheckInPage: React.FC = () => {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  
+  const [formData, setFormData] = useState<CheckInFormData>({
+    mood: 3,
+    stress: 3,
+    energy: 3,
+    motivation: 3,
+    notes: '',
+  });
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [hasExistingCheckIn, setHasExistingCheckIn] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [completedCheckIn, setCompletedCheckIn] = useState<CheckInData | null>(null);
+
+  useEffect(() => {
+    if (authLoading) return;
+    
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    checkForExistingCheckIn();
+  }, [user, authLoading, router]);
+
+  const checkForExistingCheckIn = async () => {
+    if (!user) return;
+    
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const existing = await CheckInService.getCheckIn(user.uid, today);
+      
+      if (existing) {
+        setHasExistingCheckIn(true);
+        setFormData({
+          mood: existing.mood,
+          stress: existing.stress,
+          energy: existing.energy,
+          motivation: existing.motivation,
+          notes: existing.notes || '',
+        });
+      }
+    } catch (error) {
+      console.error('Error checking for existing check-in:', error);
+    }
+  };
+
+  const handleSliderChange = (field: keyof CheckInFormData) => (value: number) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setError('');
+  };
+
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setFormData(prev => ({ ...prev, notes: e.target.value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user) {
+      setError('You must be logged in to check in.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const checkInData = {
+        mood: formData.mood,
+        stress: formData.stress,
+        energy: formData.energy,
+        motivation: formData.motivation,
+        notes: formData.notes?.trim() || undefined,
+        date: new Date().toISOString().split('T')[0],
+      };
+
+      await CheckInService.saveCheckIn(user.uid, checkInData);
+
+      // Store the completed check-in data and show recommendations
+      const now = new Date();
+      setCompletedCheckIn({
+        ...checkInData,
+        userId: user.uid,
+        id: Date.now().toString(), // Temporary ID for display
+        createdAt: now,
+        updatedAt: now,
+      });
+      setShowRecommendations(true);
+    } catch (error: any) {
+      setError(error.message || 'Failed to save check-in. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExerciseSelect = (exercise: Exercise) => {
+    // Navigate to exercises page with the selected exercise
+    router.push(`/exercises?selected=${exercise.id}&checkInComplete=true`);
+  };
+
+  const handleSkipToExercises = () => {
+    router.push('/exercises?checkInComplete=true');
+  };
+
+  if (authLoading) {
+    return (
+      <Layout title="Daily Check-in">
+        <div className="flex items-center justify-center h-64">
+          <Loading text="Loading your check-in..." />
+        </div>
+      </Layout>
+    );
+  }
+
+  const averageScore = Math.round(((formData.mood + formData.energy + formData.motivation + (6 - formData.stress)) / 4) * 10) / 10;
+
+  return (
+    <Layout title="Daily Check-in">
+      <div className="max-w-2xl mx-auto">
+        {!showRecommendations ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            {/* Header */}
+            <div className="text-center mb-8">
+              <CheckSquare className="text-primary-500 mx-auto mb-4" size={48} />
+              <h1 className="text-3xl font-bold text-white mb-2">
+                {hasExistingCheckIn ? "Update Today's Check-in" : "Daily Check-in"}
+              </h1>
+              <p className="text-gray-400">
+                Take a moment to reflect on how you're feeling today. Your mental wellness journey starts here.
+              </p>
+            </div>
+
+          {/* Check-in Form */}
+          <div className="card">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Mood Slider */}
+              <div>
+                <CustomSlider
+                  label="How is your mood today?"
+                  value={formData.mood}
+                  onChange={handleSliderChange('mood')}
+                  min={1}
+                  max={5}
+                  icons={['frown', 'frown', 'meh', 'smile', 'smile']}
+                  color="red"
+                />
+                <p className="text-sm text-gray-400 mt-2">
+                  Rate how you're feeling emotionally from 1 (very low) to 5 (excellent)
+                </p>
+              </div>
+
+              {/* Stress Slider */}
+              <div>
+                <CustomSlider
+                  label="What's your stress level?"
+                  value={formData.stress}
+                  onChange={handleSliderChange('stress')}
+                  min={1}
+                  max={5}
+                  emoji={['😌', '😊', '😐', '😟', '😰']}
+                  color="orange"
+                />
+                <p className="text-sm text-gray-400 mt-2">
+                  Rate your stress from 1 (very relaxed) to 5 (very stressed)
+                </p>
+              </div>
+
+              {/* Energy Slider */}
+              <div>
+                <CustomSlider
+                  label="How's your energy level?"
+                  value={formData.energy}
+                  onChange={handleSliderChange('energy')}
+                  min={1}
+                  max={5}
+                  emoji={['😴', '😪', '😐', '⚡', '🔥']}
+                  color="green"
+                />
+                <p className="text-sm text-gray-400 mt-2">
+                  Rate your energy from 1 (exhausted) to 5 (highly energized)
+                </p>
+              </div>
+
+              {/* Motivation Slider */}
+              <div>
+                <CustomSlider
+                  label="How motivated do you feel?"
+                  value={formData.motivation}
+                  onChange={handleSliderChange('motivation')}
+                  min={1}
+                  max={5}
+                  emoji={['😞', '😕', '😐', '💪', '🚀']}
+                  color="blue"
+                />
+                <p className="text-sm text-gray-400 mt-2">
+                  Rate your motivation from 1 (no motivation) to 5 (extremely motivated)
+                </p>
+              </div>
+
+              {/* Notes Section */}
+              <div>
+                <label className="block text-lg font-medium text-gray-100 mb-3">
+                  Additional Notes (Optional)
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={handleNotesChange}
+                  placeholder="Share any thoughts, goals, or reflections about your day..."
+                  className="input-field resize-none h-24"
+                  disabled={loading}
+                />
+                <p className="text-sm text-gray-400 mt-2">
+                  Use this space to track specific goals, challenges, or insights
+                </p>
+              </div>
+
+              {/* Summary Card */}
+              <div className="bg-dark-500 rounded-lg p-4 border border-primary-500/20">
+                <h3 className="text-lg font-semibold text-white mb-3">Your Check-in Summary</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center">
+                    <span className="text-2xl block mb-1">{getMoodEmoji(formData.mood)}</span>
+                    <p className="text-sm text-gray-400">Mood</p>
+                    <p className="text-white font-bold">{formData.mood}/5</p>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-2xl block mb-1">{getStressEmoji(formData.stress)}</span>
+                    <p className="text-sm text-gray-400">Stress</p>
+                    <p className="text-white font-bold">{formData.stress}/5</p>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-2xl block mb-1">{getEnergyEmoji(formData.energy)}</span>
+                    <p className="text-sm text-gray-400">Energy</p>
+                    <p className="text-white font-bold">{formData.energy}/5</p>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-2xl block mb-1">{getMotivationEmoji(formData.motivation)}</span>
+                    <p className="text-sm text-gray-400">Motivation</p>
+                    <p className="text-white font-bold">{formData.motivation}/5</p>
+                  </div>
+                </div>
+                <div className="text-center pt-4 border-t border-dark-300">
+                  <p className="text-sm text-gray-400">Overall Score</p>
+                  <p className="text-2xl font-bold text-primary-500">{averageScore}/5</p>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                  <p className="text-red-400 text-sm">{error}</p>
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <div className="flex space-x-4">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary flex-1"
+                >
+                  {loading ? (
+                    <div className="flex items-center justify-center">
+                      <Loading size="sm" />
+                      <span className="ml-2">
+                        {hasExistingCheckIn ? 'Updating...' : 'Saving...'}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <Save size={20} />
+                      {hasExistingCheckIn ? 'Update Check-in' : 'Complete Check-in'}
+                    </>
+                  )}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => router.push('/')}
+                  className="btn-secondary px-6"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Motivational Message */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="text-center mt-8"
+          >
+            <p className="text-gray-400">
+              Every check-in brings you closer to better mental wellness. You're building a powerful habit! 💪
+            </p>
+          </motion.div>
+        </motion.div>
+        ) : (
+          // Show recommendations after successful check-in
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            {/* Success Header */}
+            <div className="text-center mb-8">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4"
+              >
+                <CheckSquare className="text-white" size={32} />
+              </motion.div>
+              <h1 className="text-3xl font-bold text-white mb-2">Check-in Complete! 🎉</h1>
+              <p className="text-gray-400">
+                Great job on staying consistent with your mental wellness. Here are some personalized recommendations based on your check-in.
+              </p>
+            </div>
+
+            {/* Exercise Recommendations */}
+            {completedCheckIn && (
+              <ExerciseRecommendations
+                checkInData={completedCheckIn}
+                onExerciseSelect={handleExerciseSelect}
+                className="mb-8"
+              />
+            )}
+
+            {/* Navigation Options */}
+            <div className="flex flex-col sm:flex-row gap-4 mt-8">
+              <button
+                onClick={handleSkipToExercises}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2"
+              >
+                <ArrowRight className="w-4 h-4" />
+                <span>Browse All Exercises</span>
+              </button>
+              <button
+                onClick={() => router.push('/')}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </div>
+    </Layout>
+  );
+};
+
+export default CheckInPage;

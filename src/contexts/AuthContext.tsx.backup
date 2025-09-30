@@ -1,0 +1,351 @@
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
+import { onAuthStateChanged, User as FirebaseUser, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { auth } from '@/services/firebase';
+import { AuthService } from '@/services/auth';
+import { UserService } from '@/services/users';
+import { User } from '@/types';
+import { UserProfile } from '@/types/user';
+
+interface AuthContextType {
+  user: User | null;
+  profile: UserProfile | null;
+  loading: boolean;
+  error: string | null;
+  signIn: (email: string, password: string) => Promise<User>;
+  signUp: (email: string, password: string, displayName: string) => Promise<User>;
+  signOut: () => Promise<void>;
+  createProfile: (profileData: Partial<UserProfile>) => Promise<void>;
+  refreshProfile: () => Promise<void>;
+  clearError: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+// Check if Firebase is properly configured
+const isFirebaseConfigured = process.env.NEXT_PUBLIC_FIREBASE_API_KEY && 
+                            process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [persistenceSet, setPersistenceSet] = useState(false);
+  const mountedRef = useRef(true);
+
+  // Set Firebase persistence once at app init
+  useEffect(() => {
+    if (!isFirebaseConfigured || persistenceSet) return;
+    
+    setPersistence(auth, browserLocalPersistence)
+      .then(() => setPersistenceSet(true))
+      .catch((error) => {
+        console.error('Failed to set Firebase persistence:', error);
+        setPersistenceSet(true); // Continue anyway
+      });
+  }, [persistenceSet]);
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    if (!isFirebaseConfigured) {
+      // Demo mode - check localStorage for demo user
+      console.log('AuthContext: Running in demo mode');
+      const demoUser = AuthService.getDemoUser();
+      setUser(demoUser);
+      setProfile(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    // Wait for persistence to be set before setting up auth listener
+    if (!persistenceSet) return;
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      // Debounce rapid state changes
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        if (!mountedRef.current) return;
+
+        setLoading(true);
+        setError(null);
+
+        try {
+          if (firebaseUser) {
+            // User is signed in
+            const userData = await AuthService.convertFirebaseUser(firebaseUser);
+            if (!mountedRef.current) return;
+            
+            setUser(userData);
+            
+            // Load user profile
+            const userProfile = await UserService.getUserProfile(firebaseUser.uid);
+            if (!mountedRef.current) return;
+            
+            setProfile(userProfile);
+            
+            // Update last login timestamp if profile exists
+            if (userProfile) {
+              UserService.updateLastLogin(firebaseUser.uid).catch(console.error);
+            }
+          } else {
+            // User is signed out
+            setUser(null);
+            setProfile(null);
+          }
+        } catch (error) {
+          console.error('Error in auth state change:', error);
+          if (mountedRef.current) {
+            setError('Failed to load user data');
+            setUser(null);
+            setProfile(null);
+          }
+        } finally {
+          if (mountedRef.current) {
+            setLoading(false);
+          }
+        }
+      }, 100); // 100ms debounce
+    });
+
+    return () => {
+      clearTimeout(timeoutId);
+      unsubscribe();
+    };
+  }, [persistenceSet]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const signIn = async (email: string, password: string): Promise<User> => {
+    setError(null);
+    try {
+      const userData = await AuthService.signIn(email, password);
+      return userData;
+    } catch (error: any) {
+      const errorMessage = error.code ? getFirebaseErrorMessage(error.code) : 'Failed to sign in';
+      setError(errorMessage);
+      throw error;
+    }
+  };
+
+  const signUp = async (email: string, password: string, displayName: string): Promise<User> => {
+    setError(null);
+    try {
+      const userData = await AuthService.signUp(email, password, displayName);
+      return userData;
+    } catch (error: any) {
+      const errorMessage = error.code ? getFirebaseErrorMessage(error.code) : 'Failed to create account';
+      setError(errorMessage);
+      throw error;
+    }
+  };
+
+  const signOut = async (): Promise<void> => {
+    setError(null);
+    try {
+      await AuthService.signOut();
+      // State will be updated by onAuthStateChanged
+    } catch (error: any) {
+      console.error('Sign out error:', error);
+      setError('Failed to sign out');
+    }
+  };
+
+  const createProfile = async (profileData: Partial<UserProfile>): Promise<void> => {
+    if (!user?.uid) throw new Error('User not authenticated');
+    
+    setError(null);
+    try {
+      await UserService.createUserProfile(user.uid, {
+        ...profileData,
+        uid: user.uid,
+        email: user.email || profileData.email || ''
+      });
+      
+      // Refresh profile after creation
+      const newProfile = await UserService.getUserProfile(user.uid);
+      if (mountedRef.current) {
+        setProfile(newProfile);
+      }
+    } catch (error: any) {
+      console.error('Error creating profile:', error);
+      setError('Failed to create profile');
+      throw error;
+    }
+  };
+
+  const refreshProfile = async (): Promise<void> => {
+    if (!user?.uid) return;
+    
+    setError(null);
+    try {
+      const userProfile = await UserService.getUserProfile(user.uid);
+      if (mountedRef.current) {
+        setProfile(userProfile);
+      }
+    } catch (error: any) {
+      console.error('Error refreshing profile:', error);
+      setError('Failed to refresh profile');
+    }
+  };
+
+  const clearError = () => {
+    setError(null);
+  };
+
+  const value: AuthContextType = {
+    user,
+    profile,
+    loading,
+    error,
+    signIn,
+    signUp,
+    signOut,
+    createProfile,
+    refreshProfile,
+    clearError,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+// Helper function for Firebase error messages
+const getFirebaseErrorMessage = (errorCode: string): string => {
+  switch (errorCode) {
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/operation-not-allowed':
+      return 'Email/password accounts are not enabled.';
+    case 'auth/weak-password':
+      return 'Please choose a stronger password.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled.';
+    case 'auth/user-not-found':
+      return 'No account found with this email address.';
+    case 'auth/wrong-password':
+      return 'Incorrect password. Please try again.';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please try again later.';
+    case 'auth/network-request-failed':
+      return 'Network error. Please check your connection.';
+    default:
+      return 'An unexpected error occurred. Please try again.';
+  }
+};
+
+  const signIn = async (email: string, password: string): Promise<User> => {
+    setLoading(true);
+    try {
+      const userData = await AuthService.signIn(email, password);
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const signUp = async (email: string, password: string, displayName: string): Promise<User> => {
+    setLoading(true);
+    try {
+      const userData = await AuthService.signUp(email, password, displayName);
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const signOut = async (): Promise<void> => {
+    setLoading(true);
+    try {
+      await AuthService.signOut();
+      setUser(null);
+      setProfile(null);
+    } catch (error) {
+      console.error('Sign out error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createProfile = async (profileData: Partial<UserProfile>): Promise<void> => {
+    if (!user?.uid) throw new Error('User not authenticated');
+    
+    try {
+      await UserService.createUserProfile(user.uid, {
+        ...profileData,
+        uid: user.uid,
+        email: user.email || profileData.email || ''
+      });
+      
+      // Refresh profile after creation
+      const newProfile = await UserService.getUserProfile(user.uid);
+      setProfile(newProfile);
+    } catch (error) {
+      console.error('Error creating profile:', error);
+      throw error;
+    }
+  };
+
+  const refreshProfile = async (): Promise<void> => {
+    if (!user?.uid) return;
+    
+    try {
+      const userProfile = await UserService.getUserProfile(user.uid);
+      setProfile(userProfile);
+    } catch (error) {
+      console.error('Error refreshing profile:', error);
+    }
+  };
+
+  const value: AuthContextType = {
+    user,
+    profile,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    createProfile,
+    refreshProfile,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
