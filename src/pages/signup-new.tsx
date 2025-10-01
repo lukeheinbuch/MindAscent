@@ -5,7 +5,7 @@ import SignupWizard from '@/components/auth/SignupWizard';
 
 const SignupNewPage: React.FC = () => {
 	return (
-		<Layout title="Create Account">
+		<Layout title="Create Account" fullScreen>
 			<RequireGuest>
 				<div className="max-w-2xl mx-auto py-10">
 					<SignupWizard />
