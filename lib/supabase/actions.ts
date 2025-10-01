@@ -19,6 +19,9 @@ export async function signUp(formData: {
     email,
     password,
     options: {
+      emailRedirectTo: process.env.NEXT_PUBLIC_SITE_URL
+        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm`
+        : undefined,
       data: {
         username,
         age,

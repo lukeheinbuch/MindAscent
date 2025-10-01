@@ -38,12 +38,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import KpiCard from '@/components/dashboard/KpiCard';
 import { gamificationService, LEVEL_THRESHOLDS, ACHIEVEMENTS, getRankMeta } from '@/services/gamification';
 import { useUserProgress } from '@/hooks/useUserProgress';
+import { useProfile } from '@/hooks/useProfile';
 
 const Heatmap = dynamic(() => import('@/components/stats/Heatmap'), { ssr: false });
 
 const ProfilePage: React.FC = () => {
   const router = useRouter();
   const { user, loading: authLoading, signOut } = useAuth();
+  const { profile: supaProfile, isLoading: profileLoading } = useProfile();
 
   const { kpis, wellbeingProgress, heatmap } = useUserProgress('90d');
   const [xpState, setXpState] = useState<{ xp: number; level: number; current: number; total: number; percent: number } | null>(null);
@@ -62,12 +64,14 @@ const ProfilePage: React.FC = () => {
       return;
     }
 
-    // Load local profile edits
+    // Prefer Supabase profile fields; fall back to local storage then email-derived
     if (typeof window !== 'undefined') {
       const savedName = localStorage.getItem('profile_name');
       const savedBio = localStorage.getItem('profile_bio');
-      setDisplayName(savedName || user?.email?.split('@')[0] || 'Athlete');
-      setBio(savedBio || 'Insert bio');
+      const fromDbName = (supaProfile?.display_name || supaProfile?.username || '').trim();
+      const fromDbBio = (supaProfile?.about || '').trim();
+      setDisplayName(fromDbName || savedName || user?.email?.split('@')[0] || 'Athlete');
+      setBio(fromDbBio || savedBio || 'Insert bio');
     }
 
     // Load XP profile (demo mode safe)
@@ -114,7 +118,7 @@ const ProfilePage: React.FC = () => {
     setEditing(false);
   };
 
-  if (authLoading || loading) {
+  if (authLoading || loading || profileLoading) {
     return (
       <Layout title="Profile">
         <div className="flex items-center justify-center h-64">
@@ -258,6 +262,43 @@ const ProfilePage: React.FC = () => {
             <KpiCard title="Current Streak" value={<span className="text-red-500 font-semibold">{kpis?.streakDays ?? 0} days</span>} icon={<Target className="w-5 h-5 text-red-500" />} />
             <KpiCard title="Weekly Avg Wellbeing" value={<span className="text-yellow-500">{kpis?.weeklyAvgWellbeing ?? 0}</span>} icon={<TrendingUp className="text-yellow-500" size={24} />} color="yellow" />
             <KpiCard title="Total Check-ins" value={<span className="text-green-500 font-semibold">{kpis?.totalCheckIns ?? 0}</span>} color="green" icon={<TrendingUp className="w-5 h-5 text-green-500" />} />
+          </div>
+
+          {/* Athlete Profile Details */}
+          <div className="grid grid-cols-1 gap-6 mb-8">
+            <div className="bg-gray-800/70 rounded-2xl p-6 border border-gray-700/80">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <User className="w-5 h-5 text-white" /> Athlete Profile
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <div className="text-gray-400">Sport</div>
+                  <div className="text-white">{supaProfile?.sport || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-gray-400">Level</div>
+                  <div className="text-white">{supaProfile?.level || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-gray-400">Age</div>
+                  <div className="text-white">{typeof supaProfile?.age === 'number' ? supaProfile?.age : '—'}</div>
+                </div>
+                <div>
+                  <div className="text-gray-400">Country</div>
+                  <div className="text-white">{supaProfile?.country || '—'}</div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="text-gray-400">Goals</div>
+                  <div className="text-white">{(supaProfile?.goals && supaProfile.goals.length > 0) ? supaProfile.goals.join(', ') : '—'}</div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="text-gray-400">About Me</div>
+                  <div className="text-white">{supaProfile?.about || '—'}</div>
+                </div>
+              </div>
+            </div>
           </div>
           {xpState && (
             <div className="mb-10 -mt-4 relative">

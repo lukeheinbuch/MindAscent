@@ -42,8 +42,6 @@ interface Step2Data {
 interface Step3Data {
   goals: GoalTag[];
   about: string;
-  agreeToTerms: boolean;
-  agreeToData: boolean;
 }
 
 interface FormErrors {
@@ -77,8 +75,7 @@ const SignupWizard: React.FC = () => {
   const [step3Data, setStep3Data] = useState<Step3Data>({
     goals: [],
     about: '',
-    agreeToTerms: false,
-    agreeToData: false
+    
   });
   
   const [errors, setErrors] = useState<FormErrors>({});
@@ -87,9 +84,20 @@ const SignupWizard: React.FC = () => {
 
   // Simple username availability check (placeholder). In production, check against your DB.
   const isUsernameAvailable = async (username: string): Promise<boolean> => {
-    // Basic validation and assume available when valid
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return false;
-    return true;
+    try {
+      const res = await fetch('/api/supabase/check-username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      if (!res.ok) return true; // be lenient on transient errors
+      const json = await res.json();
+      return !!json.available;
+    } catch (e) {
+      console.warn('username availability check failed', e);
+      return true; // lenient fallback
+    }
   };
 
   // Do not auto-redirect here; RequireGuest will handle redirect
@@ -187,14 +195,6 @@ const SignupWizard: React.FC = () => {
       newErrors.goals = 'Please select no more than 5 goals';
     }
 
-    if (!step3Data.agreeToTerms) {
-      newErrors.agreeToTerms = 'You must agree to the Terms of Service';
-    }
-
-    if (!step3Data.agreeToData) {
-      newErrors.agreeToData = 'You must agree to the Data Use Policy';
-    }
-
     if (step3Data.about && step3Data.about.length > 140) {
       newErrors.about = 'About section must be 140 characters or less';
     }
@@ -249,12 +249,50 @@ const SignupWizard: React.FC = () => {
     try {
       // Sign up with Supabase; session will be null if email confirmation is required
       const { session } = await signUp(step1Data.email, step1Data.password);
+      const collected = {
+        email: step1Data.email,
+        display_name: step1Data.username,
+        username: step1Data.username,
+        sport: step2Data.sport,
+        level: step2Data.level || undefined,
+        age: typeof step2Data.age === 'number' ? step2Data.age : undefined,
+        country: step2Data.country || undefined,
+        goals: step3Data.goals && step3Data.goals.length ? step3Data.goals : undefined,
+        about: step3Data.about || undefined,
+      };
+
       if (!session) {
-        // Email confirmation required
+        // Email confirmation required: stash pending profile for after login
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('pendingProfile', JSON.stringify(collected));
+          } catch (e) {
+            console.warn('Failed to save pendingProfile to localStorage', e);
+          }
+        }
         setConfirmationPending(step1Data.email);
         return; // stop here; user must confirm via email
       }
-      // If session exists, redirect to dashboard immediately
+
+      // If session exists, upsert profile immediately then redirect
+      try {
+        const resp = await fetch('/api/supabase/ensure-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(collected),
+        });
+        if (!resp.ok) {
+          const errJson = await resp.json().catch(() => ({}));
+          if (resp.status === 409) {
+            setGeneralError(errJson?.error || 'That username is already taken. Please choose another.');
+            return; // stop, let user change username
+          }
+          setGeneralError(errJson?.error || 'Failed to save your profile. Please try again.');
+          return;
+        }
+      } catch (e) {
+        console.warn('ensure-profile failed after signup', e);
+      }
       router.replace('/dashboard');
       
     } catch (error: any) {
@@ -276,6 +314,16 @@ const SignupWizard: React.FC = () => {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       <div className="w-full max-w-lg mx-auto">
+        {/* Back to Home */}
+        <div className="mb-4">
+          <button
+            onClick={() => router.push('/')}
+            className="flex items-center gap-2 text-neutral-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft size={18} />
+            Back to Home
+          </button>
+        </div>
         {confirmationPending && (
           <div className="mb-6 p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg text-amber-300">
             Please check {confirmationPending} to confirm your email. After confirming, return to the app and log in.
@@ -686,50 +734,7 @@ const SignupWizard: React.FC = () => {
                   )}
                 </div>
 
-                {/* Terms & Data Use */}
-                <div className="space-y-3 p-4 bg-neutral-800 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={step3Data.agreeToTerms}
-                      onChange={(e) => {
-                        setStep3Data(prev => ({ ...prev, agreeToTerms: e.target.checked }));
-                        clearFieldError('agreeToTerms');
-                      }}
-                      className="mt-1 w-4 h-4 text-red-600 bg-neutral-900 border-neutral-600 rounded focus:ring-red-500/30"
-                    />
-                    <label className="text-sm text-neutral-300">
-                      I agree to the{' '}
-                      <a href="/terms" className="text-red-600 hover:text-red-500 underline">
-                        Terms of Service
-                      </a>
-                    </label>
-                  </div>
-                  {errors.agreeToTerms && (
-                    <p className="text-red-400 text-sm">{errors.agreeToTerms}</p>
-                  )}
-                  
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={step3Data.agreeToData}
-                      onChange={(e) => {
-                        setStep3Data(prev => ({ ...prev, agreeToData: e.target.checked }));
-                        clearFieldError('agreeToData');
-                      }}
-                      className="mt-1 w-4 h-4 text-red-600 bg-neutral-900 border-neutral-600 rounded focus:ring-red-500/30"
-                    />
-                    <label className="text-sm text-neutral-300">
-                      I agree to the{' '}
-                      <a href="/privacy" className="text-red-600 hover:text-red-500 underline">
-                        Data Use Policy
-                      </a>
-                    </label>
-                  </div>
-                  {errors.agreeToData && (
-                    <p className="text-red-400 text-sm">{errors.agreeToData}</p>
-                  )}
-                </div>
+                {/* Terms removed by request */}
 
                 {/* Buttons */}
                 <div className="flex gap-4 pt-4">
@@ -743,7 +748,7 @@ const SignupWizard: React.FC = () => {
                   </button>
                   <button
                     onClick={handleSubmit}
-                    disabled={loading || step3Data.goals.length === 0 || !step3Data.agreeToTerms || !step3Data.agreeToData}
+                    disabled={loading || step3Data.goals.length === 0}
                     className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-neutral-700 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
                   >
                     {loading ? (

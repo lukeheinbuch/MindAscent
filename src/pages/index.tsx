@@ -400,12 +400,11 @@ const HomePage: React.FC = () => {
 						</div>
             
 						<div>
-							<h4 className="font-bold mb-4 text-white">Legal</h4>
-							<ul className="space-y-2 text-gray-400 text-sm">
-								<li><a href="/terms" className="hover:text-white transition-colors">Terms</a></li>
-								<li><a href="/privacy" className="hover:text-white transition-colors">Privacy</a></li>
-								<li><a href="/contact" className="hover:text-white transition-colors">Contact</a></li>
-							</ul>
+							<h4 className="font-bold mb-4 text-white">Contact</h4>
+							<div className="space-y-1 text-gray-400 text-sm">
+								<div className="text-gray-500">Email</div>
+								<a href="mailto:mindascentinfo@gmail.com" className="hover:text-white transition-colors">mindascentinfo@gmail.com</a>
+							</div>
 						</div>
 					</div>
           

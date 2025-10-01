@@ -16,24 +16,81 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: 'Not authenticated' })
     }
 
-    const { email, full_name, avatar_url } = req.body
+    // Accept extended optional fields from signup wizard
+    const {
+      email,
+      full_name,
+      avatar_url,
+      // Extended profile fields (all optional)
+      display_name,
+      username,
+      sport,
+      level,
+      age,
+      country,
+      goals,
+      about,
+    } = req.body as Partial<{
+      email: string;
+      full_name: string;
+      avatar_url: string;
+      display_name: string;
+      username: string;
+      sport: string;
+      level: string;
+      age: number;
+      country: string;
+      goals: string[];
+      about: string;
+    }>
 
     // Upsert the profile
+    // Build upsert payload only with provided fields to avoid schema mismatches
+    const payload: Record<string, any> = {
+      id: user.id,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (typeof email !== 'undefined') payload.email = email;
+    if (typeof full_name !== 'undefined') payload.full_name = full_name || null;
+    if (typeof avatar_url !== 'undefined') payload.avatar_url = avatar_url || null;
+    if (typeof display_name !== 'undefined') payload.display_name = display_name || null;
+    if (typeof username !== 'undefined') payload.username = username || null;
+    if (typeof sport !== 'undefined') payload.sport = sport || null;
+    if (typeof level !== 'undefined') payload.level = level || null;
+    if (typeof age !== 'undefined') payload.age = age ?? null;
+    if (typeof country !== 'undefined') payload.country = country || null;
+    if (typeof goals !== 'undefined') payload.goals = goals ?? null;
+    if (typeof about !== 'undefined') payload.about = about || null;
+
+    // Optional: enforce unique username across profiles
+    if (payload.username) {
+      const { data: existing, error: checkErr } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('username', payload.username)
+        .neq('id', user.id)
+        .limit(1);
+      if (!checkErr && existing && existing.length > 0) {
+        return res.status(409).json({ error: 'Username already taken' });
+      }
+    }
+
     const { data, error } = await supabase
       .from('profiles')
-      .upsert({
-        id: user.id,
-        email: email,
-        full_name: full_name || null,
-        avatar_url: avatar_url || null,
-        updated_at: new Date().toISOString()
-      }, {
+      .upsert(payload, {
         onConflict: 'id'
       })
       .select()
       .single()
 
     if (error) {
+      // If unique constraint on username fires, bubble a 409 so UI can show a friendly message
+      const msg = (error as any)?.message || ''
+      const code = (error as any)?.code || ''
+      if (code === '23505' || /unique|duplicate key/i.test(msg)) {
+        return res.status(409).json({ error: 'Username already taken' })
+      }
       console.error('Error upserting profile:', error)
       return res.status(500).json({ error: 'Failed to upsert profile' })
     }

@@ -86,9 +86,33 @@ const LoginPageContent: React.FC = () => {
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('justSignedIn', '1');
         setTimeout(() => sessionStorage.removeItem('justSignedIn'), 3000);
+        // If there is a pending profile from signup, upsert it now
+        try {
+          const raw = localStorage.getItem('pendingProfile');
+          if (raw) {
+            const pending = JSON.parse(raw);
+            const resp = await fetch('/api/supabase/ensure-profile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(pending),
+            });
+            if (!resp.ok) {
+              const errJson = await resp.json().catch(() => ({}));
+              if (resp.status === 409) {
+                console.warn('Pending profile username conflict:', errJson?.error);
+              } else {
+                console.warn('Pending profile apply failed:', errJson?.error || resp.statusText);
+              }
+              // We still clear to avoid endless retry loop; user can set later in Profile
+            }
+            localStorage.removeItem('pendingProfile');
+          }
+        } catch (e) {
+          console.warn('Failed applying pendingProfile on login', e);
+        }
       }
-  // Redirect to dashboard after explicit successful sign-in
-  router.replace('/dashboard');
+      // Redirect to dashboard after explicit successful sign-in
+      router.replace('/dashboard');
     } catch (err: any) {
       console.error('Login error:', err);
       
