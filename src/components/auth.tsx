@@ -18,17 +18,9 @@ export const RequireAuth = ({ children }: { children: React.ReactNode }) => {
 }
 
 export const RequireGuest = ({ children }: { children: React.ReactNode }) => {
-  const { loading, user } = useAuth()
-  const router = useRouter()
+  const { loading } = useAuth()
 
-  useEffect(() => {
-    if (!loading && user) {
-  // Prefer dashboard if available; fallback to '/'
-  router.replace('/dashboard')
-    }
-  }, [loading, user, router])
-
+  // Only gate rendering during initial auth check; do not redirect if already authenticated.
   if (loading) return null
-  if (user) return null
   return <>{children}</>
 }

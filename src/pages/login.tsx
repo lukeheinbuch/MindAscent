@@ -87,9 +87,8 @@ const LoginPageContent: React.FC = () => {
         sessionStorage.setItem('justSignedIn', '1');
         setTimeout(() => sessionStorage.removeItem('justSignedIn'), 3000);
       }
-      // Let AuthContext onAuthStateChange propagate first
-      await Promise.resolve();
-      router.replace('/dashboard');
+  // Redirect to dashboard after explicit successful sign-in
+  router.replace('/dashboard');
     } catch (err: any) {
       console.error('Login error:', err);
       

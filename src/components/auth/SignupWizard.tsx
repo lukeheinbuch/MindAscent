@@ -254,7 +254,8 @@ const SignupWizard: React.FC = () => {
         setConfirmationPending(step1Data.email);
         return; // stop here; user must confirm via email
       }
-      // If session exists, RequireGuest will redirect once auth state updates
+      // If session exists, redirect to dashboard immediately
+      router.replace('/dashboard');
       
     } catch (error: any) {
       console.error('Signup error:', error);
