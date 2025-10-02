@@ -42,23 +42,24 @@ export default function Confirm() {
           })
         }
 
-        // Apply any pending profile captured pre-confirmation
+        // Apply any pending profile captured pre-confirmation; otherwise ensure a minimal profile is created
         try {
           const raw = localStorage.getItem('pendingProfile')
+          let body: any = {}
           if (raw) {
-            const pending = JSON.parse(raw)
-            const resp = await fetch('/api/supabase/ensure-profile', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(pending)
-            })
-            if (resp.ok) {
-              localStorage.removeItem('pendingProfile')
-            }
+            body = JSON.parse(raw)
+          }
+          const resp = await fetch('/api/supabase/ensure-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          })
+          if (resp.ok && raw) {
+            localStorage.removeItem('pendingProfile')
           }
         } catch (e) {
           // Non-fatal
-          console.warn('Failed applying pendingProfile after confirm', e)
+          console.warn('Failed applying/creating profile after confirm', e)
         }
 
         setStatus('done')

@@ -82,33 +82,40 @@ const LoginPageContent: React.FC = () => {
         setLoading(false);
         return;
       }
+      // Set SSR auth cookie so API routes can authenticate this user
+      try {
+        await fetch('/api/auth/callback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: 'SIGNED_IN', session })
+        });
+      } catch (e) {
+        console.warn('Failed to set server session cookie after login', e);
+      }
       success('Welcome back!', 'You have been successfully logged in.');
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('justSignedIn', '1');
         setTimeout(() => sessionStorage.removeItem('justSignedIn'), 3000);
-        // If there is a pending profile from signup, upsert it now
+        // Ensure the user's profile exists. If we have a pending profile, send it; otherwise send minimal body
         try {
           const raw = localStorage.getItem('pendingProfile');
-          if (raw) {
-            const pending = JSON.parse(raw);
-            const resp = await fetch('/api/supabase/ensure-profile', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(pending),
-            });
-            if (!resp.ok) {
-              const errJson = await resp.json().catch(() => ({}));
-              if (resp.status === 409) {
-                console.warn('Pending profile username conflict:', errJson?.error);
-              } else {
-                console.warn('Pending profile apply failed:', errJson?.error || resp.statusText);
-              }
-              // We still clear to avoid endless retry loop; user can set later in Profile
+          const body = raw ? JSON.parse(raw) : {};
+          const resp = await fetch('/api/supabase/ensure-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!resp.ok) {
+            const errJson = await resp.json().catch(() => ({}));
+            if (resp.status === 409) {
+              console.warn('Pending/minimal profile conflict:', errJson?.error);
+            } else {
+              console.warn('Profile ensure failed:', errJson?.error || resp.statusText);
             }
-            localStorage.removeItem('pendingProfile');
           }
+          if (raw) localStorage.removeItem('pendingProfile');
         } catch (e) {
-          console.warn('Failed applying pendingProfile on login', e);
+          console.warn('Failed ensuring profile on login', e);
         }
       }
       // Redirect to dashboard after explicit successful sign-in

@@ -248,7 +248,6 @@ const SignupWizard: React.FC = () => {
 
     try {
       // Sign up with Supabase; session will be null if email confirmation is required
-      const { session } = await signUp(step1Data.email, step1Data.password);
       const collected = {
         email: step1Data.email,
         display_name: step1Data.username,
@@ -260,6 +259,7 @@ const SignupWizard: React.FC = () => {
         goals: step3Data.goals && step3Data.goals.length ? step3Data.goals : undefined,
         about: step3Data.about || undefined,
       };
+      const { session } = await signUp(step1Data.email, step1Data.password, collected);
 
       if (!session) {
         // Email confirmation required: stash pending profile for after login

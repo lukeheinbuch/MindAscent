@@ -9,7 +9,7 @@ type AuthState = {
   error: string | null;
   clearError: () => void;
   signIn: (email: string, password: string) => Promise<{ session: any | null }>;
-  signUp: (email: string, password: string) => Promise<{ session: any | null }>;
+  signUp: (email: string, password: string, metadata?: Record<string, any>) => Promise<{ session: any | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -64,14 +64,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Returns { user, session }
       return { session: data.session ?? null };
     },
-    signUp: async (email, password) => {
+    signUp: async (email, password, metadata) => {
       const emailRedirectTo = typeof window !== 'undefined'
         ? `${window.location.origin}/auth/confirm`
         : undefined;
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo }
+        options: { emailRedirectTo, data: metadata || undefined }
       });
       if (error) {
         console.error('signUp error:', error);

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
-import { User, Settings, Trophy, Target, TrendingUp, LogOut, Edit3, Calendar } from 'lucide-react';
+import { User, Trophy, Target, TrendingUp, LogOut } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfile } from '@/hooks/useProfile';
 
 const ProfilePage: React.FC = () => {
   const router = useRouter();
   const { user, loading: authLoading, signOut } = useAuth();
+  const { profile, isLoading: profileLoading } = useProfile();
   
   const [loading, setLoading] = useState(true);
 
@@ -31,7 +33,7 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  if (authLoading || loading) {
+  if (authLoading || loading || profileLoading) {
     return (
       <Layout title="Profile">
         <div className="flex items-center justify-center h-64">
@@ -57,10 +59,9 @@ const ProfilePage: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white">
-                  {/* Prefer username; fall back to left-of-@ email */}
-                  {user?.user_metadata?.username || user?.email?.split('@')[0] || 'User'}
+                  {profile?.username || profile?.display_name || user?.email?.split('@')[0] || 'User'}
                 </h1>
-                <p className="text-gray-400">@{user?.user_metadata?.username || user?.email?.split('@')[0]}</p>
+                <p className="text-gray-400">@{profile?.username || user?.email?.split('@')[0]}</p>
               </div>
             </div>
             
@@ -73,7 +74,7 @@ const ProfilePage: React.FC = () => {
             </button>
           </div>
 
-          {/* Stats Cards */}
+          {/* Stats Cards (basic placeholders; real values shown on dashboard) */}
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
               <div className="flex items-center justify-between mb-2">
@@ -103,20 +104,35 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Get Started Section */}
-          <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
-            <h2 className="text-xl font-semibold text-white mb-4">
-              Welcome to MindAscent!
-            </h2>
-            <p className="text-gray-400 mb-6">
-              Start your wellness journey by completing your first check-in to unlock your full profile.
-            </p>
-            <button
-              onClick={() => router.push('/checkin')}
-              className="bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
-            >
-              Complete First Check-in
-            </button>
+          {/* Athlete Profile */}
+          <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
+            <h2 className="text-xl font-semibold text-white mb-4">Athlete Profile</h2>
+            <div className="grid md:grid-cols-2 gap-6 text-gray-200">
+              <div>
+                <p className="text-sm text-gray-400">Sport</p>
+                <p className="text-lg">{profile?.sport || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">Level</p>
+                <p className="text-lg">{profile?.level || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">Age</p>
+                <p className="text-lg">{typeof profile?.age === 'number' ? profile?.age : '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">Country</p>
+                <p className="text-lg">{profile?.country || '—'}</p>
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-sm text-gray-400">Goals</p>
+                <p className="text-lg">{Array.isArray(profile?.goals) ? (profile?.goals as any[]).join(', ') : (profile?.goals || '—')}</p>
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-sm text-gray-400">About</p>
+                <p className="text-lg whitespace-pre-wrap">{profile?.about || '—'}</p>
+              </div>
+            </div>
           </div>
         </motion.div>
       </div>
