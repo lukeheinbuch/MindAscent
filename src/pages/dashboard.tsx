@@ -28,11 +28,12 @@ const WellbeingChart = dynamic(() => import('@/components/dashboard/WellbeingCha
 const DashboardContent: React.FC = () => {
   const router = useRouter();
   const { user } = useAuth();
-  const displayName = (user?.user_metadata?.username as string) || user?.email || 'Athlete';
+  const { profile } = useProfile();
+  const displayName = (profile?.username || profile?.display_name || user?.email || 'Athlete') as string;
   const { error: pushToast } = useToast();
   const [selectedRange, setSelectedRange] = useState<Range>('30d');
   const { isLoading, error, kpis, chart } = useUserProgress(selectedRange);
-  useProfile();
+  // ensure profile is fetched
 
   const hasData = (kpis?.totalCheckIns ?? 0) > 0 || (chart?.points?.length ?? 0) > 0;
 

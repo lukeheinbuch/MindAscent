@@ -44,6 +44,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       about: string;
     }>
 
+    // Load existing profile to enforce immutability on username
+    const { data: existingProfile, error: existingErr } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .single();
+
+    if (existingErr && existingErr.code !== 'PGRST116') { // PGRST116 = not found
+      console.error('Error fetching existing profile:', existingErr)
+    }
+
     // Upsert the profile
     // Build upsert payload only with provided fields to avoid schema mismatches
     const payload: Record<string, any> = {
@@ -55,7 +66,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (typeof full_name !== 'undefined') payload.full_name = full_name || null;
     if (typeof avatar_url !== 'undefined') payload.avatar_url = avatar_url || null;
     if (typeof display_name !== 'undefined') payload.display_name = display_name || null;
-    if (typeof username !== 'undefined') payload.username = username || null;
+    // Username immutability: can only be set once if currently null; cannot be changed afterwards
+    if (typeof username !== 'undefined') {
+      const incoming = (username || '').trim() || null;
+      const current = (existingProfile?.username || '').trim() || null;
+      if (current) {
+        if (incoming && incoming.toLowerCase() !== current.toLowerCase()) {
+          return res.status(409).json({ error: 'Username cannot be changed once set' });
+        }
+        // Ignore attempts to unset or re-set to the same value
+      } else {
+        // No current username; allow setting if provided
+        if (incoming) payload.username = incoming;
+      }
+    }
     if (typeof sport !== 'undefined') payload.sport = sport || null;
     if (typeof level !== 'undefined') payload.level = level || null;
     if (typeof age !== 'undefined') payload.age = age ?? null;

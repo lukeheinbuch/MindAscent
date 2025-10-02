@@ -22,7 +22,7 @@ export default function Confirm() {
           if (error) throw error
           session = data.session
         } else {
-          // Fallback: token hash flow (older confirm links)
+          // Token hash flow (standard email confirmation links)
           const token_hash = typeof router.query.token_hash === 'string' ? router.query.token_hash : undefined
           const type = typeof router.query.type === 'string' ? router.query.type : 'email'
 
@@ -30,11 +30,6 @@ export default function Confirm() {
             const { data, error } = await supabase.auth.verifyOtp({ type: type as any, token_hash })
             if (error) throw error
             session = data.session ?? (await supabase.auth.getSession()).data.session
-          } else if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
-            // Very old style hash-based redirect
-            const { data, error } = await supabase.auth.getSessionFromUrl({ storeSession: true })
-            if (error) throw error
-            session = data.session
           }
         }
 

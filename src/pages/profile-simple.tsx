@@ -57,9 +57,10 @@ const ProfilePage: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white">
-                  {user?.email?.split('@')[0] || 'User'}
+                  {/* Prefer username; fall back to left-of-@ email */}
+                  {user?.user_metadata?.username || user?.email?.split('@')[0] || 'User'}
                 </h1>
-                <p className="text-gray-400">{user?.email}</p>
+                <p className="text-gray-400">@{user?.user_metadata?.username || user?.email?.split('@')[0]}</p>
               </div>
             </div>
             
