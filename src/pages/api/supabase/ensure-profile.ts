@@ -62,7 +62,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updated_at: new Date().toISOString(),
     };
 
-    if (typeof email !== 'undefined') payload.email = email;
+    // Ensure email is always present on first insert to satisfy NOT NULL
+    // Prefer an explicit email from body if provided; otherwise fall back to the auth user email
+    payload.email = (typeof email !== 'undefined' && email) ? email : (user.email ?? null);
     if (typeof full_name !== 'undefined') payload.full_name = full_name || null;
     if (typeof avatar_url !== 'undefined') payload.avatar_url = avatar_url || null;
     if (typeof display_name !== 'undefined') payload.display_name = display_name || null;
