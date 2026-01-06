@@ -7,7 +7,12 @@ type CheckInPayload = {
   mood_rating: number // 1-10
   energy_level: number // 1-10
   stress_management: number // 1-10, higher = better stress management
-  sleep_hours?: number
+  // Extended metrics (optional but recommended for overall wellbeing)
+  motivation?: number // 1-10
+  confidence?: number // 1-10
+  focus?: number // 1-10
+  recovery?: number // 1-10
+  sleep_hours?: number // 1-10 sleep quality score (historically hours)
   notes?: string
 }
 
@@ -59,6 +64,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         energy_level: payload.energy_level,
         stress_management: payload.stress_management,
         sleep_hours: payload.sleep_hours ?? null,
+        motivation: payload.motivation ?? null,
+        confidence: payload.confidence ?? null,
+        focus: payload.focus ?? null,
+        recovery: payload.recovery ?? null,
         notes: payload.notes ?? null
       }, {
         onConflict: 'user_id,date'

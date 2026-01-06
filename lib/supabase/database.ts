@@ -5,10 +5,12 @@ export async function addCheckIn(checkInData: {
   mood: number
   stress_management: number
   energy: number
-  motivation: number
-  sleep?: number
-  soreness?: number
+  motivation?: number
+  confidence?: number
   focus?: number
+  recovery?: number
+  sleep?: number // sleep quality 1-10
+  soreness?: number
   training_load?: 'none' | 'light' | 'moderate' | 'hard'
   pre_competition?: boolean
   note?: string
@@ -31,8 +33,11 @@ export async function addCheckIn(checkInData: {
       mood_rating: checkInData.mood,
       stress_management: checkInData.stress_management,
       energy_level: checkInData.energy,
-      // Note: motivation is not in the DB schema but we'll store it in notes for now
-      sleep_hours: checkInData.sleep || 8,
+      sleep_hours: checkInData.sleep ?? null,
+      motivation: checkInData.motivation ?? null,
+      confidence: checkInData.confidence ?? null,
+      focus: checkInData.focus ?? null,
+      recovery: checkInData.recovery ?? null,
       notes: checkInData.note || null
     })
     .select()

@@ -147,7 +147,7 @@ export function useUserProgress(range: Range = '30d') {
             points.push({ date: key, wellbeing: null });
             (Object.keys(dailySeries) as MetricKey[]).forEach(m => dailySeries[m].push({ date: key, value: null }));
           } else {
-            const avg = items.reduce((acc, it) => acc + computeWellbeing({ mood_rating: it.mood, stress_management: it.stress_management, energy_level: it.energy, motivation: it.motivation, confidence: it.confidence as number | undefined }), 0) / items.length;
+            const avg = items.reduce((acc, it) => acc + computeWellbeing({ mood_rating: it.mood, stress_management: it.stress_management, energy_level: it.energy, motivation: it.motivation, confidence: it.confidence as number | undefined, focus: it.focus as number | undefined, recovery: it.recovery as number | undefined, sleep: it.sleep as number | undefined }), 0) / items.length;
             points.push({ date: key, wellbeing: Math.round(avg) });
             // per-metric means
             const mean = (arr: number[]) => arr.reduce((a,b)=>a+b,0)/arr.length;
@@ -182,7 +182,7 @@ export function useUserProgress(range: Range = '30d') {
   const to100 = (v: number) => Math.max(0, Math.min(100, ((v - 1) / 9) * 100));
   const mentalIndexPerDay: number[] = [];
         // Mental Index based on core metrics only, using the freshly built dailySeries
-        const metricsKeys: MetricKey[] = ['mood','stress_management','energy','motivation','confidence'];
+  const metricsKeys: MetricKey[] = ['mood','stress_management','energy','motivation','confidence','focus','recovery','sleep'];
         for (let i = 0; i < (dailySeries.mood?.length || 0); i++) {
           let sum = 0; let count = 0;
           metricsKeys.forEach(m => {
