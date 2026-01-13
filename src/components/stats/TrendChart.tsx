@@ -30,7 +30,7 @@ const TrendChart: React.FC<TrendChartProps> = ({
   secondaryColor = '#3B82F6',
   showTrendLine = false,
   height = 300,
-  domain,
+  domain = [0, 10],
   unit = ''
 }) => {
   const [hovered, setHovered] = React.useState(false);
@@ -56,7 +56,7 @@ const TrendChart: React.FC<TrendChartProps> = ({
     }));
   }, [data, showTrendLine]);
 
-  const formatTooltip = (value: any, name: string) => {
+  const formatTooltip = (value: any, name?: string) => {
     if (typeof value === 'number') {
       return [`${value.toFixed(1)}${unit}`, name];
     }

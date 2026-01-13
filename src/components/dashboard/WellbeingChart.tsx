@@ -26,14 +26,14 @@ export default function WellbeingChart({ data, title = 'Overall Wellbeing' }: Pr
   >
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-white">{title}</h3>
-        <span className="text-xs text-gray-400">0-100</span>
+          <span className="text-xs text-gray-400">0-10</span>
       </div>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis dataKey="date" stroke="#9CA3AF" fontSize={12} tickMargin={8} />
-            <YAxis stroke="#9CA3AF" domain={[0, 100]} tickCount={6} fontSize={12} />
+              <YAxis stroke="#9CA3AF" domain={[0, 10]} tickCount={6} fontSize={12} />
             <Tooltip
               contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: 'white' }}
               formatter={(value) => [`${value}`, 'Wellbeing']}

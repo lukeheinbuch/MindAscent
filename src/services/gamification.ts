@@ -1,6 +1,7 @@
 import { auth, db } from './firebase';
 import { doc, setDoc, getDoc, updateDoc, increment, collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { UserProfile, CheckInDocument, CompletedExerciseDocument, CompletedEducationDocument } from '@/types';
+import { updateUserProfile, logDailyTask, logAchievement } from '../../lib/supabase/database';
 
 export interface UserStats {
   userId: string;
@@ -39,21 +40,21 @@ export interface ActivityRecord {
 
 // XP amounts for different activities
 export const XP_REWARDS = {
-  // Core daily actions
-  DAILY_CHECKIN: 15,              // Encourages consistent return; baseline daily XP
-  LOGIN_DAILY: 10,                // Daily login (lighter than reflective check-in)
-  EXERCISE_COMPLETION: 25,        // Higher effort guided exercise completion
-  EDUCATION_COMPLETION: 30,       // Consuming educational content (once per item per day)
-  EXERCISE_VIEW: 5,               // Opening/starting an exercise (minor engagement)
-  RESOURCE_VIEW: 8,               // Viewing a resource article/tool
+  // Core daily actions - matching daily task XP values
+  DAILY_CHECKIN: 50,              // Daily Check-in task
+  LOGIN_DAILY: 0,                 // No XP for login (use daily task instead)
+  EXERCISE_COMPLETION: 30,        // Do an Exercise task
+  EDUCATION_COMPLETION: 25,       // View Education task
+  EXERCISE_VIEW: 0,               // No XP for just viewing
+  RESOURCE_VIEW: 20,              // Check a Resource task
 
   // Streak bonuses (multipliers on habit formation)
-  STREAK_BONUS_3_DAYS: 35,
-  STREAK_BONUS_7_DAYS: 75,
-  STREAK_BONUS_30_DAYS: 200,
+  STREAK_BONUS_3_DAYS: 0,
+  STREAK_BONUS_7_DAYS: 0,
+  STREAK_BONUS_30_DAYS: 0,
 
   // One‑time starter / milestone
-  FIRST_TIME_BONUS: 50,
+  FIRST_TIME_BONUS: 0,
 };
 
 // Level progression (XP required for each level)
@@ -125,32 +126,32 @@ export interface AchievementDef {
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
-  // Login streak examples
-  { id: 'login-streak-3', group: 'login', target: 3, xp: 35, icon: 'calendar', label: '3 Day Login', description: 'Log in 3 days in a row.' },
-  { id: 'login-streak-7', group: 'login', target: 7, xp: 75, icon: 'calendar-days', label: '7 Day Login', description: 'Log in 7 days consecutively.' },
-  { id: 'login-streak-14', group: 'login', target: 14, xp: 120, icon: 'calendar-range', label: '14 Day Login', description: 'Two-week login streak.' },
-  { id: 'login-streak-30', group: 'login', target: 30, xp: 200, icon: 'flame', label: '30 Day Login', description: 'One month login streak.' },
+  // Check-in streaks (primary daily task)
+  { id: 'checkin-streak-3', group: 'checkins', target: 3, xp: 50, icon: 'calendar', label: '3 Check-ins', description: '3 consecutive daily check-ins.' },
+  { id: 'checkin-streak-7', group: 'checkins', target: 7, xp: 125, icon: 'calendar-days', label: 'Week Consistent', description: '7 consecutive daily check-ins.' },
+  { id: 'checkin-streak-14', group: 'checkins', target: 14, xp: 200, icon: 'calendar-range', label: 'Fortnight Strong', description: '14 consecutive daily check-ins.' },
+  { id: 'checkin-streak-30', group: 'checkins', target: 30, xp: 400, icon: 'flame', label: 'Monthly Dedicated', description: '30 consecutive daily check-ins.' },
   // Exercises completed
-  { id: 'ex-1', group: 'exercise', target: 1, xp: 10, icon: 'zap', label: 'First Rep', description: 'Complete 1 exercise.' },
-  { id: 'ex-5', group: 'exercise', target: 5, xp: 30, icon: 'activity', label: '5 Exercises', description: 'Complete 5 exercises.' },
-  { id: 'ex-10', group: 'exercise', target: 10, xp: 60, icon: 'pulse', label: '10 Exercises', description: 'Complete 10 exercises.' },
-  { id: 'ex-20', group: 'exercise', target: 20, xp: 120, icon: 'dumbbell', label: '20 Exercises', description: 'Complete 20 exercises.' },
-  { id: 'ex-50', group: 'exercise', target: 50, xp: 300, icon: 'trophy', label: '50 Exercises', description: 'Complete 50 exercises.' },
-  { id: 'ex-100', group: 'exercise', target: 100, xp: 600, icon: 'medal', label: '100 Exercises', description: 'Complete 100 exercises.' },
+  { id: 'ex-1', group: 'exercise', target: 1, xp: 15, icon: 'zap', label: 'First Exercise', description: 'Complete 1 exercise.' },
+  { id: 'ex-5', group: 'exercise', target: 5, xp: 50, icon: 'activity', label: '5 Exercises', description: 'Complete 5 exercises.' },
+  { id: 'ex-10', group: 'exercise', target: 10, xp: 100, icon: 'pulse', label: '10 Exercises', description: 'Complete 10 exercises.' },
+  { id: 'ex-20', group: 'exercise', target: 20, xp: 200, icon: 'dumbbell', label: '20 Exercises', description: 'Complete 20 exercises.' },
+  { id: 'ex-50', group: 'exercise', target: 50, xp: 450, icon: 'trophy', label: '50 Exercises', description: 'Complete 50 exercises.' },
+  { id: 'ex-100', group: 'exercise', target: 100, xp: 900, icon: 'medal', label: '100 Exercises', description: 'Complete 100 exercises.' },
   // Resources viewed
-  { id: 'res-1', group: 'resource', target: 1, xp: 8, icon: 'book-open', label: 'First Resource', description: 'View 1 resource.' },
-  { id: 'res-5', group: 'resource', target: 5, xp: 24, icon: 'book-marked', label: '5 Resources', description: 'View 5 resources.' },
-  { id: 'res-10', group: 'resource', target: 10, xp: 48, icon: 'library', label: '10 Resources', description: 'View 10 resources.' },
-  { id: 'res-20', group: 'resource', target: 20, xp: 96, icon: 'layers', label: '20 Resources', description: 'View 20 resources.' },
-  { id: 'res-50', group: 'resource', target: 50, xp: 240, icon: 'archive', label: '50 Resources', description: 'View 50 resources.' },
-  { id: 'res-100', group: 'resource', target: 100, xp: 480, icon: 'vault', label: '100 Resources', description: 'View 100 resources.' },
+  { id: 'res-1', group: 'resource', target: 1, xp: 12, icon: 'book-open', label: 'First Resource', description: 'View 1 resource.' },
+  { id: 'res-5', group: 'resource', target: 5, xp: 40, icon: 'book-marked', label: '5 Resources', description: 'View 5 resources.' },
+  { id: 'res-10', group: 'resource', target: 10, xp: 80, icon: 'library', label: '10 Resources', description: 'View 10 resources.' },
+  { id: 'res-20', group: 'resource', target: 20, xp: 160, icon: 'layers', label: '20 Resources', description: 'View 20 resources.' },
+  { id: 'res-50', group: 'resource', target: 50, xp: 350, icon: 'archive', label: '50 Resources', description: 'View 50 resources.' },
+  { id: 'res-100', group: 'resource', target: 100, xp: 700, icon: 'vault', label: '100 Resources', description: 'View 100 resources.' },
   // Education pieces
-  { id: 'edu-1', group: 'education', target: 1, xp: 11, icon: 'brain', label: 'First Lesson', description: 'View 1 education item.' },
-  { id: 'edu-5', group: 'education', target: 5, xp: 33, icon: 'lightbulb', label: '5 Lessons', description: 'View 5 education items.' },
-  { id: 'edu-10', group: 'education', target: 10, xp: 66, icon: 'graduation-cap', label: '10 Lessons', description: 'View 10 education items.' },
-  { id: 'edu-20', group: 'education', target: 20, xp: 132, icon: 'scroll', label: '20 Lessons', description: 'View 20 education items.' },
-  { id: 'edu-50', group: 'education', target: 50, xp: 330, icon: 'books', label: '50 Lessons', description: 'View 50 education items.' },
-  { id: 'edu-100', group: 'education', target: 100, xp: 660, icon: 'university', label: '100 Lessons', description: 'View 100 education items.' },
+  { id: 'edu-1', group: 'education', target: 1, xp: 13, icon: 'brain', label: 'First Lesson', description: 'View 1 education item.' },
+  { id: 'edu-5', group: 'education', target: 5, xp: 45, icon: 'lightbulb', label: '5 Lessons', description: 'View 5 education items.' },
+  { id: 'edu-10', group: 'education', target: 10, xp: 90, icon: 'graduation-cap', label: '10 Lessons', description: 'View 10 education items.' },
+  { id: 'edu-20', group: 'education', target: 20, xp: 180, icon: 'scroll', label: '20 Lessons', description: 'View 20 education items.' },
+  { id: 'edu-50', group: 'education', target: 50, xp: 400, icon: 'books', label: '50 Lessons', description: 'View 50 education items.' },
+  { id: 'edu-100', group: 'education', target: 100, xp: 800, icon: 'university', label: '100 Lessons', description: 'View 100 education items.' },
 ];
 
 interface AchievementProgressState {
@@ -388,9 +389,36 @@ class GamificationService {
         // Award XP for each badge unlock
         for (const b of newBadges) {
           updatedProfile.xp += b.xpReward;
+          // Log achievement to Supabase
+          try {
+            await logAchievement(b.id, b.xpReward);
+          } catch (e) {
+            console.warn('Failed to log achievement to Supabase:', e);
+          }
         }
         // Recalculate level after badge XP
         updatedProfile.level = this.calculateLevel(updatedProfile.xp);
+      }
+
+      // Log daily task if applicable
+      if (activityType === 'check-in' && xpAmount > 0) {
+        try {
+          await logDailyTask('checkin', xpAmount);
+        } catch (e) {
+          console.warn('Failed to log daily task to Supabase:', e);
+        }
+      } else if (activityType === 'exercise' && xpAmount > 0) {
+        try {
+          await logDailyTask('exercise', xpAmount);
+        } catch (e) {
+          console.warn('Failed to log daily task to Supabase:', e);
+        }
+      } else if (activityType === 'education' && xpAmount > 0) {
+        try {
+          await logDailyTask('education', xpAmount);
+        } catch (e) {
+          console.warn('Failed to log daily task to Supabase:', e);
+        }
       }
 
       if (!auth || !db) {
@@ -399,6 +427,18 @@ class GamificationService {
         const activities = JSON.parse(localStorage.getItem(`activities_${userId}`) || '[]');
         activities.push({ id: crypto.randomUUID?.() || Date.now().toString(), type: activityType, description, xpGained: xpAmount, timestamp: new Date().toISOString(), metadata });
         localStorage.setItem(`activities_${userId}`, JSON.stringify(activities));
+        
+        // Also sync to Supabase in demo mode
+        try {
+          await updateUserProfile({
+            total_xp: updatedProfile.xp,
+            current_level: updatedProfile.level,
+            badges: updatedProfile.badges,
+          });
+        } catch (e) {
+          console.warn('Failed to sync profile to Supabase:', e);
+        }
+        
         return updatedProfile;
       }
 
@@ -409,6 +449,17 @@ class GamificationService {
         badges: updatedProfile.badges,
         updatedAt: Timestamp.fromDate(new Date()),
       });
+
+      // Also sync to Supabase
+      try {
+        await updateUserProfile({
+          total_xp: updatedProfile.xp,
+          current_level: updatedProfile.level,
+          badges: updatedProfile.badges,
+        });
+      } catch (e) {
+        console.warn('Failed to sync profile to Supabase:', e);
+      }
 
       // Log activity record
       await addDoc(collection(db, 'users', userId, 'activities'), {

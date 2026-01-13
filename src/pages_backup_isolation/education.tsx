@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
-import { BookOpen, Brain, Heart, Shield, Battery, Lightbulb, Search, Filter } from 'lucide-react';
+import { BookOpen, Brain, Heart, Shield, Battery, Lightbulb, Search, Filter, Play } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageContainer from '@/components/PageContainer';
 import { useAuth } from '@/contexts/AuthContext';
@@ -71,6 +71,9 @@ const EducationPage: React.FC = () => {
   };
 
   const handleCardClick = async (card: EducationCard) => {
+    // Mark education task as complete
+    localStorage.setItem('educationViewed', 'true');
+    
     try {
       if (user?.id) {
         await gamificationService.recordEducationAccess(user.id, card.id);
@@ -152,21 +155,32 @@ const EducationPage: React.FC = () => {
           transition={{ delay: 0.2 }}
           className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6"
         >
-          {filteredCards.map((card, index) => (
+          {filteredCards.map((card, index) => {
+            const isVideo = card.tags?.includes('video');
+            const badgeText = card.readTime
+              ? `${card.readTime} min ${isVideo ? 'watch' : 'read'}`
+              : isVideo ? 'Watch' : 'Read';
+
+            return (
             <motion.div
               key={card.id}
               initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.03 } }}
+              transition={{ duration: 0.5, delay: index * 0.1 }}
+              whileHover={{ scale: 1.03, y: -8, transition: { duration: 0.08 } }}
               onClick={() => handleCardClick(card)}
-              className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-red-500 cursor-pointer transition-all duration-200 hover:transform hover:scale-105"
+              className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-red-500 cursor-pointer group"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className={`p-3 rounded-lg ${getCategoryColor(card.category)}`}>
-                  <BookOpen className="w-6 h-6 text-white" />
+                  {isVideo ? (
+                    <Play className="w-6 h-6 text-white" />
+                  ) : (
+                    <BookOpen className="w-6 h-6 text-white" />
+                  )}
                 </div>
                 <span className="text-xs font-medium text-red-400 bg-red-900/30 px-2 py-1 rounded">
-                  {card.readTime} min read
+                  {badgeText}
                 </span>
               </div>
 
@@ -174,7 +188,7 @@ const EducationPage: React.FC = () => {
               <p className="text-gray-400 mb-4 text-sm line-clamp-3">{card.description}</p>
 
               <div className="flex flex-wrap gap-1 mb-4">
-                {card.tags.slice(0, 3).map((tag) => (
+                {card.tags.map((tag) => (
                   <span
                     key={tag}
                     className="text-xs px-2 py-1 bg-gray-700 text-gray-300 rounded"
@@ -182,18 +196,14 @@ const EducationPage: React.FC = () => {
                     {tag}
                   </span>
                 ))}
-                {card.tags.length > 3 && (
-                  <span className="text-xs px-2 py-1 bg-gray-700 text-gray-300 rounded">
-                    +{card.tags.length - 3} more
-                  </span>
-                )}
               </div>
 
               <div className="text-sm text-gray-500">
                 Category: {categories.find(cat => cat.id === card.category)?.name || card.category}
               </div>
             </motion.div>
-          ))}
+            );
+          })}
         </motion.div>
 
         {/* No Results */}

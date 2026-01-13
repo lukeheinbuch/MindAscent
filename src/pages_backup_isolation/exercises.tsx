@@ -17,7 +17,6 @@ const ExercisesPage: React.FC = () => {
   const { checkInComplete } = router.query;
   
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
   const [exercises, setExercises] = useState<Exercise[]>(exercisesData);
 
   useEffect(() => {
@@ -31,7 +30,7 @@ const ExercisesPage: React.FC = () => {
 
   useEffect(() => {
     filterExercises();
-  }, [selectedCategory, selectedDifficulty]);
+  }, [selectedCategory]);
 
   const filterExercises = () => {
     let filtered = exercisesData;
@@ -40,14 +39,13 @@ const ExercisesPage: React.FC = () => {
       filtered = getExercisesByCategory(selectedCategory);
     }
 
-    if (selectedDifficulty !== 'all') {
-      filtered = filtered.filter(exercise => exercise.difficulty === selectedDifficulty);
-    }
-
     setExercises(filtered);
   };
 
   const handleExerciseClick = async (exerciseId: string) => {
+    // Mark exercise task as complete
+    localStorage.setItem('exerciseClicked', 'true');
+    
     if (user?.id) {
       try {
         await gamificationService.recordExerciseAccess(user.id, exerciseId);
@@ -101,16 +99,7 @@ const ExercisesPage: React.FC = () => {
     { value: 'mindfulness', label: 'Mindfulness' },
     { value: 'visualization', label: 'Visualization' },
     { value: 'confidence', label: 'Confidence' },
-    { value: 'stress-relief', label: 'Stress Relief' },
-    { value: 'focus', label: 'Focus' },
     { value: 'recovery', label: 'Recovery' },
-  ];
-
-  const difficulties = [
-    { value: 'all', label: 'All Levels' },
-    { value: 'beginner', label: 'Beginner' },
-    { value: 'intermediate', label: 'Intermediate' },
-    { value: 'advanced', label: 'Advanced' },
   ];
 
   if (authLoading) {
@@ -159,48 +148,25 @@ const ExercisesPage: React.FC = () => {
             <h2 className="text-lg font-semibold text-white">Filter Exercises</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
             {/* Category Filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-200 mb-2">
+              <label className="block text-sm font-medium text-gray-200 mb-3">
                 Category
               </label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-3">
                 {categories.map((category) => (
                   <button
                     key={category.value}
                     onClick={() => setSelectedCategory(category.value)}
                     type="button"
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`px-5 py-2.5 rounded-lg font-medium transition-colors ${
                       selectedCategory === category.value
                         ? 'bg-red-600 text-white'
                         : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                     }`}
                   >
                     {category.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Difficulty Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-200 mb-2">
-                Difficulty Level
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {difficulties.map((d) => (
-                  <button
-                    key={d.value}
-                    onClick={() => setSelectedDifficulty(d.value)}
-                    type="button"
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      selectedDifficulty === d.value
-                        ? 'bg-red-600 text-white'
-                        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    }`}
-                  >
-                    {d.label}
                   </button>
                 ))}
               </div>
@@ -221,9 +187,10 @@ const ExercisesPage: React.FC = () => {
             <motion.div
               key={exercise.id}
               initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.03 } }}
               transition={{ duration: 0.5, delay: 0.2 + (index * 0.1) }}
-              className="card hover:border-primary-500/50 transition-colors cursor-pointer group h-full"
+              whileHover={{ scale: 1.03, y: -8, transition: { duration: 0.08 } }}
+              className="card hover:border-primary-500/50 hover:shadow-2xl hover:shadow-primary-500/20 cursor-pointer group h-full"
               onClick={() => handleExerciseClick(exercise.id)}
             >
               {/* Exercise Header */}
@@ -253,12 +220,6 @@ const ExercisesPage: React.FC = () => {
                     <Clock size={16} className="mr-1" />
                     {formatDuration(exercise.duration)}
                   </div>
-                  <div className="flex items-center text-gray-400">
-                    <User size={16} className="mr-1" />
-                    <span className={getDifficultyColor(exercise.difficulty)}>
-                      {capitalize(exercise.difficulty)}
-                    </span>
-                  </div>
                 </div>
               </div>
 
@@ -277,16 +238,14 @@ const ExercisesPage: React.FC = () => {
               <div className="mt-4 pt-4 border-t border-dark-300">
                 <p className="text-xs text-gray-500 mb-2">Key Benefits:</p>
                 <div className="flex flex-wrap gap-1">
-                  {exercise.benefits.slice(0, 2).map((benefit, i) => (
-                    <span key={i} className="text-xs text-gray-400 bg-dark-500 px-2 py-1 rounded">
-                      {benefit.length > 20 ? `${benefit.substring(0, 20)}...` : benefit}
+                  {exercise.benefits.map((benefit, i) => (
+                    <span 
+                      key={i} 
+                      className="text-xs text-gray-400 bg-dark-500 px-2 py-1 rounded"
+                    >
+                      {benefit}
                     </span>
                   ))}
-                  {exercise.benefits.length > 2 && (
-                    <span className="text-xs text-gray-500 px-2 py-1">
-                      +{exercise.benefits.length - 2} more
-                    </span>
-                  )}
                 </div>
               </div>
             </motion.div>

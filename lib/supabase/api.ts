@@ -13,9 +13,9 @@ export function createClient(req: NextApiRequest, res: NextApiResponse) {
             value: req.cookies[name] || '',
           }))
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: Array<{name: string, value: string, options?: any}>) {
           // Aggregate multiple cookies and set as an array to avoid overwriting on Vercel
-          const cookieHeaders = cookiesToSet.map(({ name, value, options }) => {
+          const cookieHeaders = cookiesToSet.map(({ name, value, options }: {name: string, value: string, options?: any}) => {
             const parts: string[] = []
             parts.push(`${name}=${encodeURIComponent(value)}`)
             parts.push('Path=/')

@@ -31,16 +31,17 @@ import {
   Scroll,
   Book,
   Rocket,
+  Heart,
+  Check,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageContainer from '@/components/PageContainer';
 import { useAuth } from '@/contexts/AuthContext';
 import KpiCard from '@/components/dashboard/KpiCard';
-import { gamificationService, LEVEL_THRESHOLDS, ACHIEVEMENTS, getRankMeta } from '@/services/gamification';
+import { ACHIEVEMENTS, getRankMeta } from '@/services/gamification';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useProfile } from '@/hooks/useProfile';
-
-const Heatmap = dynamic(() => import('@/components/stats/Heatmap'), { ssr: false });
+import { supabase } from '@/lib/supabaseClient';
 
 const ProfilePage: React.FC = () => {
   const router = useRouter();
@@ -48,13 +49,55 @@ const ProfilePage: React.FC = () => {
   const { profile: supaProfile, isLoading: profileLoading } = useProfile();
 
   const { kpis, wellbeingProgress, heatmap } = useUserProgress('90d');
-  const [xpState, setXpState] = useState<{ xp: number; level: number; current: number; total: number; percent: number } | null>(null);
   const [achievementState, setAchievementState] = useState<{ unlocked: Set<string> }>({ unlocked: new Set() });
 
   const [loading, setLoading] = useState(true);
   const [displayName, setDisplayName] = useState<string>('');
   const [bio, setBio] = useState<string>('');
   const [editing, setEditing] = useState<boolean>(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<boolean>(false);
+
+  // Athlete details (editable)
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [sport, setSport] = useState<string>('');
+  const [level, setLevel] = useState<string>('');
+  const [age, setAge] = useState<number | ''>('');
+  const [country, setCountry] = useState<string>('');
+  const [goalsText, setGoalsText] = useState<string>('');
+  const [aboutMe, setAboutMe] = useState<string>('');
+
+  // Daily tasks state - automatically updated based on user activity
+  const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
+  const dailyTasks = [
+    { id: 'checkin', icon: Zap, label: 'Daily Check-in', xp: 50, color: 'from-blue-500 to-cyan-500' },
+    { id: 'exercise', icon: Dumbbell, label: 'Do an Exercise', xp: 30, color: 'from-purple-500 to-pink-500' },
+    { id: 'resource', icon: Heart, label: 'Check a Resource', xp: 20, color: 'from-red-500 to-orange-500' },
+    { id: 'education', icon: BookOpen, label: 'View Education', xp: 25, color: 'from-green-500 to-emerald-500' },
+  ];
+
+  // Auto-complete tasks based on user activity
+  useEffect(() => {
+    if (!kpis) return;
+    
+    const newCompleted = new Set<string>();
+    
+    // Check-in: if user has any check-ins or just completed one
+    if (kpis.totalCheckIns > 0 || localStorage.getItem('checkinCompleted') === 'true') newCompleted.add('checkin');
+    
+    // Exercise: if user has completed any exercises or clicked one
+    if (kpis.exercisesCompleted > 0 || localStorage.getItem('exerciseClicked') === 'true') newCompleted.add('exercise');
+    
+    // We'll track education and resources via localStorage since they're not in KPI
+    const educationViewed = localStorage.getItem('educationViewed') === 'true';
+    const resourceViewed = localStorage.getItem('resourceViewed') === 'true';
+    
+    if (educationViewed) newCompleted.add('education');
+    if (resourceViewed) newCompleted.add('resource');
+    
+    setCompletedTasks(newCompleted);
+  }, [kpis]);
+  const [savingProfile, setSavingProfile] = useState<boolean>(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -72,33 +115,28 @@ const ProfilePage: React.FC = () => {
       const fromDbBio = (supaProfile?.about || '').trim();
       setDisplayName(fromDbName || savedName || user?.email?.split('@')[0] || 'Athlete');
       setBio(fromDbBio || savedBio || 'Insert bio');
+      setAvatarUrl(supaProfile?.avatar_url || null);
+
+      // hydrate athlete fields
+      setSport(supaProfile?.sport || '');
+      setLevel(supaProfile?.level || '');
+      setAge(typeof supaProfile?.age === 'number' ? supaProfile.age : '');
+      setCountry(supaProfile?.country || '');
+      setGoalsText((supaProfile?.goals && supaProfile.goals.length ? supaProfile.goals.join(', ') : ''));
+      setAboutMe(supaProfile?.about || '');
     }
 
-    // Load XP profile (demo mode safe)
-    (async () => {
+    // Load unlocked achievements (demo only for now)
+    if (typeof window !== 'undefined' && user) {
       try {
-        if (!user) return;
-        const profile = await gamificationService.getUserProfile(user.id || user.uid);
-        if (profile) {
-          const xp = profile.xp || 0;
-          const { level, currentThreshold, nextThreshold, progressed, percent } = gamificationService.getRankProgress(xp);
-          const total = Math.max(1, nextThreshold - currentThreshold);
-          setXpState({ xp, level, current: progressed, total, percent });
-
-          // Load unlocked achievements (demo only for now)
-          if (typeof window !== 'undefined') {
-            try {
-              const raw = localStorage.getItem(`ach_state_${user.id || user.uid}`);
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                setAchievementState({ unlocked: new Set(parsed.unlocked || []) });
-              }
-            } catch {}
-          }
+        const raw = localStorage.getItem(`ach_state_${user.id || user.uid}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setAchievementState({ unlocked: new Set(parsed.unlocked || []) });
         }
-      } catch (e) { console.warn('XP load failed', e); }
-      setLoading(false);
-    })();
+      } catch {}
+    }
+    setLoading(false);
   }, [user, authLoading, router]);
 
   const handleLogout = async () => {
@@ -107,6 +145,56 @@ const ProfilePage: React.FC = () => {
       router.push('/');
     } catch (error) {
       console.error('Logout error:', error);
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+    setUploading(true);
+    // optimistic preview while uploading
+    const previewUrl = URL.createObjectURL(file);
+    setAvatarUrl(previewUrl);
+    try {
+      const path = `${user.id}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      const publicUrl = data.publicUrl;
+      setAvatarUrl(publicUrl);
+      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+    } catch (err) {
+      console.error('Avatar upload failed', err);
+      alert('Avatar upload failed. Please ensure a Supabase bucket named "avatars" exists.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSaveAthleteProfile = async () => {
+    if (!user?.id) return;
+    setSavingProfile(true);
+    try {
+      const goals = goalsText
+        .split(',')
+        .map((g) => g.trim())
+        .filter(Boolean);
+      await supabase
+        .from('profiles')
+        .update({
+          sport: sport || null,
+          level: level || null,
+          age: typeof age === 'number' ? age : age ? Number(age) : null,
+          country: country || null,
+          goals: goals.length ? goals : null,
+          about: aboutMe || null,
+        })
+        .eq('id', user.id);
+      setProfileEditing(false);
+    } catch (err) {
+      console.error('Save athlete profile failed', err);
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -158,12 +246,20 @@ const ProfilePage: React.FC = () => {
             </div>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between relative">
               <div className="flex items-start md:items-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-red-600 to-yellow-500 p-[2px] shadow-[0_10px_30px_rgba(239,68,68,0.35)]">
-                  <div className="w-full h-full rounded-full bg-gray-900 flex items-center justify-center">
-                    <span className="text-2xl font-black text-white">
-                      {(displayName || user?.email || 'A')[0]?.toUpperCase()}
-                    </span>
+                <div className="relative w-24 h-24 rounded-full bg-gradient-to-tr from-red-600 to-yellow-500 p-[2px] shadow-[0_10px_30px_rgba(239,68,68,0.35)]">
+                  <div className="w-full h-full rounded-full bg-gray-900 flex items-center justify-center overflow-hidden">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-2xl font-black text-white">
+                        {(displayName || user?.email || 'A')[0]?.toUpperCase()}
+                      </span>
+                    )}
                   </div>
+                  <label className="absolute bottom-0 right-0 bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-1 rounded-full cursor-pointer shadow-[0_8px_24px_rgba(239,68,68,0.35)]">
+                    {uploading ? '...' : 'Upload'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                  </label>
                 </div>
                 <div>
                   {editing ? (
@@ -221,10 +317,11 @@ const ProfilePage: React.FC = () => {
 
           {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 mb-8">
-            {/* Rank / XP card with mini progress bar (aligned with dashboard math) */}
-            {xpState && (() => {
-              const meta = getRankMeta(xpState.level);
-              const pct = Math.round(xpState.percent);
+            {kpis && (() => {
+              const meta = getRankMeta(kpis.level);
+              const current = kpis.xp - kpis.currentLevelXP;
+              const total = kpis.nextLevelXP - kpis.currentLevelXP;
+              const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
               const visuals: Record<string, { border: string; glow: string; bg: string } > = {
                 bronze: { border: 'border border-[#cd7f32]/50', glow: 'shadow-[0_0_24px_rgba(205,127,50,0.35)]', bg: 'bg-gradient-to-br from-gray-900/80 to-gray-800/60' },
                 silver: { border: 'border border-gray-400/50', glow: 'shadow-[0_0_26px_rgba(192,192,192,0.35)]', bg: 'bg-gradient-to-br from-gray-900/80 to-gray-800/60' },
@@ -238,21 +335,20 @@ const ProfilePage: React.FC = () => {
               return (
                 <KpiCard
                   title="Rank"
-                  value={<span className="font-semibold" style={{ color: meta.color }}>{meta.title}</span>}
-                  valueClassName="text-xs md:text-sm font-black text-white drop-shadow-[0_8px_24px_rgba(239,68,68,0.2)]"
+                  value={<span className="font-extrabold" style={{ color: meta.color }}>{meta.title}</span>}
+                  valueClassName="text-2xl md:text-3xl font-black text-white drop-shadow-[0_8px_24px_rgba(239,68,68,0.25)]"
                   subtitle={
                     <div className="mt-1">
-                      <div className="flex items-center justify-between text-[9px] text-gray-400 mb-1">
-                        <span>{xpState.current} XP</span>
+                      <div className="flex items-center justify-between text-[9px] md:text-[10px] text-gray-400 mb-1">
+                        <span>{current} XP</span>
                         <span className="font-semibold text-gray-300">{pct}%</span>
-                        <span>{xpState.total} XP</span>
+                        <span>{total} XP</span>
                       </div>
                       <div className="h-2 w-full bg-gray-900/70 rounded-full overflow-hidden border border-gray-700/80">
                         <div className="h-full bg-gradient-to-r from-yellow-400 via-red-500 to-red-700" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   }
-                  // Keep only one flame: use trailing icon, no rankStyle.icon
                   icon={<Flame className="text-red-500" size={20} />}
                   color="yellow"
                   rankStyle={{ name: meta.title, border: v.border, glow: v.glow, bg: v.bg }}
@@ -266,87 +362,211 @@ const ProfilePage: React.FC = () => {
 
           {/* Athlete Profile Details */}
           <div className="grid grid-cols-1 gap-6 mb-8">
-            <div className="bg-gray-800/70 rounded-2xl p-6 border border-gray-700/80">
-              <div className="flex items-center justify-between mb-4">
+            <div className="relative overflow-hidden rounded-2xl p-6 border border-gray-700/80 bg-gradient-to-br from-gray-900 via-gray-900/60 to-gray-800">
+              <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_20%,rgba(239,68,68,0.12),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(236,72,153,0.08),transparent_35%)]" />
+              <div className="flex items-center justify-between mb-4 relative">
                 <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                   <User className="w-5 h-5 text-white" /> Athlete Profile
                 </h3>
+                <div className="flex gap-2">
+                  {profileEditing ? (
+                    <>
+                      <button
+                        onClick={handleSaveAthleteProfile}
+                        disabled={savingProfile}
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm shadow-[0_8px_24px_rgba(239,68,68,0.35)] disabled:opacity-60"
+                      >
+                        {savingProfile ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setProfileEditing(false)}
+                        className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setProfileEditing(true)}
+                      className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <div className="text-gray-400">Sport</div>
-                  <div className="text-white">{supaProfile?.sport || '—'}</div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm relative">
+                {[{
+                  label: 'Sport',
+                  value: sport,
+                  onChange: (v: string) => setSport(v)
+                }, {
+                  label: 'Level',
+                  value: level,
+                  onChange: (v: string) => setLevel(v)
+                }, {
+                  label: 'Age',
+                  value: age,
+                  onChange: (v: string) => setAge(v ? Number(v) : ''),
+                  type: 'number'
+                }, {
+                  label: 'Country',
+                  value: country,
+                  onChange: (v: string) => setCountry(v)
+                }].map((field, idx) => (
+                  <div key={field.label} className="rounded-xl border border-gray-700/80 bg-gray-900/60 p-3 shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
+                    <div className="text-gray-400 text-xs mb-1">{field.label}</div>
+                    {profileEditing ? (
+                      <input
+                        value={field.value as any}
+                        onChange={(e)=>field.onChange(e.target.value)}
+                        type={field.type || 'text'}
+                        className="w-full bg-gray-950/70 border border-gray-700 rounded-lg px-3 py-2 text-white"
+                      />
+                    ) : (
+                      <div className="text-white font-medium">{field.value || '—'}</div>
+                    )}
+                  </div>
+                ))}
+
+                <div className="md:col-span-2 rounded-xl border border-gray-700/80 bg-gray-900/60 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-gray-300 text-sm">Goals</div>
+                    {!profileEditing && goalsText && (
+                      <span className="text-[10px] text-gray-400 uppercase tracking-wide">Updated</span>
+                    )}
+                  </div>
+                  {profileEditing ? (
+                    <input
+                      value={goalsText}
+                      onChange={(e)=>setGoalsText(e.target.value)}
+                      placeholder="Comma separated goals"
+                      className="w-full bg-gray-950/70 border border-gray-700 rounded-lg px-3 py-2 text-white"
+                    />
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {goalsText ? goalsText.split(',').map(g => g.trim()).filter(Boolean).map(g => (
+                        <span key={g} className="text-xs px-3 py-1 rounded-full bg-red-600/20 text-red-100 border border-red-500/30">{g}</span>
+                      )) : <span className="text-gray-400">—</span>}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <div className="text-gray-400">Level</div>
-                  <div className="text-white">{supaProfile?.level || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-gray-400">Age</div>
-                  <div className="text-white">{typeof supaProfile?.age === 'number' ? supaProfile?.age : '—'}</div>
-                </div>
-                <div>
-                  <div className="text-gray-400">Country</div>
-                  <div className="text-white">{supaProfile?.country || '—'}</div>
-                </div>
-                <div className="md:col-span-2">
-                  <div className="text-gray-400">Goals</div>
-                  <div className="text-white">{(supaProfile?.goals && supaProfile.goals.length > 0) ? supaProfile.goals.join(', ') : '—'}</div>
-                </div>
-                <div className="md:col-span-2">
-                  <div className="text-gray-400">About Me</div>
-                  <div className="text-white">{supaProfile?.about || '—'}</div>
+
+                <div className="md:col-span-2 rounded-xl border border-gray-700/80 bg-gray-900/60 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
+                  <div className="text-gray-300 text-sm mb-2">About Me</div>
+                  {profileEditing ? (
+                    <textarea
+                      value={aboutMe}
+                      onChange={(e)=>setAboutMe(e.target.value)}
+                      rows={3}
+                      className="w-full bg-gray-950/70 border border-gray-700 rounded-lg px-3 py-2 text-white"
+                    />
+                  ) : (
+                    <p className="text-gray-200 leading-relaxed">{aboutMe || '—'}</p>
+                  )}
                 </div>
               </div>
             </div>
           </div>
-          {xpState && (
-            <div className="mb-10 -mt-4 relative">
-              <div className="absolute -inset-x-4 -inset-y-2 bg-gradient-to-br from-red-500/5 via-transparent to-transparent blur-xl pointer-events-none" />
-              <div className="flex items-center justify-between mb-2 relative">
-                <span className="text-xs uppercase tracking-wide text-gray-400">Rank {xpState.level}</span>
-                <span className="text-[10px] text-gray-400">{Math.round(xpState.percent)}% to Rank {xpState.level + 1}</span>
-              </div>
-              <div className="h-4 w-full bg-gray-900/70 backdrop-blur rounded-full overflow-hidden border border-gray-700/80 relative shadow-inner">
-                <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.05)_0%,transparent_40%,transparent_60%,rgba(255,255,255,0.05)_100%)]" />
-                <div className="h-full rounded-full bg-gradient-to-r from-yellow-400 via-red-500 to-red-700 shadow-[0_0_18px_-2px_rgba(239,68,68,0.75)] transition-all duration-700 ease-out" style={{ width: `${xpState.percent}%` }} />
-                <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full flex justify-between px-2 text-[7px] md:text-[8px] lg:text-[9px] font-medium tracking-wide text-gray-500">
-                  <span>{xpState.current} XP</span>
-                  <span>{xpState.total} XP</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Check-in Heatmap (smaller) and Achievements (wider) */}
+          {/* Daily Tasks and Achievements */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-12">
+            {/* Daily Tasks */}
             <div className="lg:col-span-2">
-              {heatmap && (
-                <Heatmap
-                  title="Check-in Heatmap"
-                  data={heatmap.cells}
-                  xLabels={heatmap.xLabels}
-                  yLabels={heatmap.yLabels}
-                  colorScale={["#111827", "#EF4444"]}
-                  height={250}
-                  showValues={false}
-                />
-              )}
-              {!heatmap && (
-                <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 text-center h-[250px] flex items-center justify-center">
-                  <p className="text-gray-400">Complete check-ins to populate your heatmap</p>
+              <div className="bg-gradient-to-br from-gray-800/90 to-gray-900/90 rounded-2xl p-6 border border-gray-700/80 backdrop-blur-sm relative overflow-hidden flex flex-col h-full">
+                {/* Animated gradient background */}
+                <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_50%,rgba(59,130,246,0.1),transparent_50%)]" />
+                <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_80%_80%,rgba(168,85,247,0.1),transparent_50%)]" />
+
+                <div className="flex items-center justify-between mb-6 relative z-10">
+                  <h3 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                    <Zap className="w-6 h-6 text-yellow-400" />
+                    Daily Tasks
+                  </h3>
+                  <span className="text-sm text-gray-400">Earn XP today</span>
                 </div>
-              )}
+
+                <div className="space-y-4 relative z-10 flex-1 flex flex-col justify-center">
+                  {dailyTasks.map((task) => {
+                    const TaskIcon = task.icon;
+                    const isCompleted = completedTasks.has(task.id);
+                    
+                    return (
+                      <div
+                        key={task.id}
+                        className={`w-full group relative rounded-xl p-4 border transition-all duration-300 ${
+                          isCompleted
+                            ? 'border-green-500/60 bg-gradient-to-r from-green-500/10 to-emerald-500/10'
+                            : 'border-gray-700 bg-gray-800/40'
+                        } overflow-hidden flex flex-col`}
+                      >
+                        {/* Completion glow */}
+                        {isCompleted && (
+                          <div className="absolute inset-0 rounded-xl bg-[radial-gradient(circle_at_center,rgba(34,197,94,0.15),transparent_70%)] pointer-events-none" />
+                        )}
+
+                        <div className="flex flex-col items-start justify-between relative z-10 gap-3">
+                          <div className="flex items-start gap-3 w-full">
+                            <div className={`p-3 rounded-lg transition-all duration-300 flex-shrink-0 ${
+                              isCompleted
+                                ? 'bg-green-500/30'
+                                : `bg-gradient-to-br ${task.color} opacity-20`
+                            }`}>
+                              <TaskIcon className={`w-6 h-6 transition-colors duration-300 ${
+                                isCompleted ? 'text-green-400' : 'text-gray-300'
+                              }`} />
+                            </div>
+                            <div className="text-left flex-1">
+                              <p className={`font-semibold text-base transition-colors duration-300 ${
+                                isCompleted ? 'text-green-300' : 'text-gray-100'
+                              }`}>
+                                {task.label}
+                              </p>
+                              <p className="text-sm text-gray-400">+{task.xp} XP</p>
+                            </div>
+                          </div>
+                          
+                          {/* Completion checkmark */}
+                          <div className="w-full flex justify-end">
+                            <div className={`flex items-center justify-center w-7 h-7 rounded-full border-2 transition-all duration-300 ${
+                              isCompleted
+                                ? 'border-green-400 bg-green-500/20'
+                                : 'border-gray-600'
+                            }`}>
+                              {isCompleted && (
+                                <motion.div
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  transition={{ type: 'spring', stiffness: 200 }}
+                                >
+                                  <Check className="w-5 h-5 text-green-400" />
+                                </motion.div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <div className="lg:col-span-3 bg-gray-800/70 rounded-2xl p-6 border border-gray-700/80 relative overflow-hidden">
+            <div className="lg:col-span-3 bg-gray-800/70 rounded-2xl p-6 border border-gray-700/80 relative overflow-hidden h-full flex flex-col">
               <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_75%_25%,rgba(239,68,68,0.15),transparent_60%)]" />
               <div className="flex items-center justify-between mb-5 relative">
                 <h3 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">Achievements <Award className="w-5 h-5 text-yellow-400" /></h3>
                 <span className="text-xs text-gray-400">Earn XP by unlocking milestones</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-5 grid-rows-4 gap-3 auto-rows-max">
                 {ACHIEVEMENTS.slice(0,20).map(a => {
-                  const unlocked = achievementState.unlocked.has(a.id);
+                  // Auto-unlock achievements based on actual KPI data
+                  const unlocked = achievementState.unlocked.has(a.id) || 
+                    (a.id === 'first-step' && kpis && kpis.totalCheckIns >= 1) ||
+                    (a.id === 'week-warrior' && kpis && kpis.streakDays >= 7) ||
+                    (a.id === 'month-master' && kpis && kpis.streakDays >= 30) ||
+                    (a.id === 'daily-exerciser' && kpis && kpis.exercisesCompleted >= 1) ||
+                    (a.id === 'consistency' && kpis && kpis.streakDays >= 3) ||
+                    (a.id === 'learner' && completedTasks.has('education'));
                   const Icon = ({ className }: { className?: string }) => {
                     switch (a.icon) {
                       case 'calendar': return <Calendar className={className} />;

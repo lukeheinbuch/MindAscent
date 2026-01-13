@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
-import { Phone, ExternalLink, MapPin, Search, Filter, Heart, Brain, Shield } from 'lucide-react';
+import { Phone, ExternalLink, Search, Filter, Heart, Brain, Shield } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageContainer from '@/components/PageContainer';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,7 +21,6 @@ const ResourcesPage: React.FC = () => {
     { id: 'all', name: 'All Resources', icon: Heart },
     { id: 'hotline', name: 'Crisis Hotlines', icon: Phone },
     { id: 'website', name: 'Websites', icon: ExternalLink },
-    { id: 'clinic', name: 'Clinics', icon: MapPin },
     { id: 'professional', name: 'Professionals', icon: Brain },
   ];
 
@@ -57,6 +56,9 @@ const ResourcesPage: React.FC = () => {
   };
 
   const handleResourceClick = async (resource: Resource) => {
+    // Mark resource task as complete
+    localStorage.setItem('resourceViewed', 'true');
+    
     if (user?.id) {
       try {
         await gamificationService.recordResourceAccess(user.id, resource.id);
@@ -86,8 +88,6 @@ const ResourcesPage: React.FC = () => {
         return Phone;
       case 'website':
         return ExternalLink;
-      case 'clinic':
-        return MapPin;
       case 'professional':
         return Brain;
       default:
@@ -101,8 +101,6 @@ const ResourcesPage: React.FC = () => {
         return 'bg-red-600';
       case 'website':
         return 'bg-blue-600';
-      case 'clinic':
-        return 'bg-green-600';
       case 'professional':
         return 'bg-purple-600';
       default:
@@ -200,10 +198,11 @@ const ResourcesPage: React.FC = () => {
               <motion.div
                 key={resource.id}
                 initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: 0.03 } }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                whileHover={{ scale: 1.03, y: -8, transition: { duration: 0.08 } }}
                 onClick={() => handleResourceClick(resource)}
-                className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-red-500 cursor-pointer transition-all duration-200 hover:transform hover:scale-105"
+                className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-red-500 cursor-pointer group"
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className={`p-3 rounded-lg ${getTypeColor(resource.type)}`}>
@@ -234,7 +233,7 @@ const ResourcesPage: React.FC = () => {
                 )}
 
                 <div className="flex flex-wrap gap-1 mb-4">
-                  {resource.tags.slice(0, 3).map((tag) => (
+                  {resource.tags.map((tag) => (
                     <span
                       key={tag}
                       className="text-xs px-2 py-1 bg-gray-700 text-gray-300 rounded"
@@ -242,11 +241,6 @@ const ResourcesPage: React.FC = () => {
                       {tag}
                     </span>
                   ))}
-                  {resource.tags.length > 3 && (
-                    <span className="text-xs px-2 py-1 bg-gray-700 text-gray-300 rounded">
-                      +{resource.tags.length - 3} more
-                    </span>
-                  )}
                 </div>
 
                 <div className="flex items-center justify-between">

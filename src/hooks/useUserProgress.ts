@@ -57,6 +57,10 @@ type Variations = Partial<Record<MetricKey, { maxSpike: number; maxDrop: number 
 
 type HeatmapData = { xLabels: string[]; yLabels: string[]; cells: Array<{ x: string; y: string; value: number }> };
 
+type Consistency = { percent: number; status: 'Great' | 'Good' | 'Needs attention' };
+
+type Momentum = { direction: '↑' | '↓' | '→'; label: string };
+
 export function useUserProgress(range: Range = '30d') {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -70,6 +74,24 @@ export function useUserProgress(range: Range = '30d') {
   const [resilience, setResilience] = useState<{ daily: SeriesPoint[]; avg: number } | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapData | null>(null);
   const [wellbeingProgress, setWellbeingProgress] = useState<{ current: number; target: number; percent: number } | null>(null);
+  const [consistency, setConsistency] = useState<Consistency | null>(null);
+  const [momentum, setMomentum] = useState<Momentum | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Listen for profile changes in localStorage
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === `profile_${user.id}`) {
+        // Profile was updated, trigger refresh
+        setRefreshTrigger(prev => prev + 1);
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,21 +103,43 @@ export function useUserProgress(range: Range = '30d') {
         const rangeStart = startDateForRange(range);
         const rangeStartIso = rangeStart.toISOString();
 
-        // Check-ins in range
-        const { data: checkins, error: ciErr } = await supabase
+        // Check-ins in range with timeout
+        const checkinsPromise = supabase
           .from('check_ins')
           .select('*')
           .eq('user_id', user.id)
           .gte('date', formatDate(rangeStart))
           .order('date', { ascending: true });
-        if (ciErr) throw ciErr;
+        
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Query timeout')), 10000)
+        );
+        
+        const { data: checkins, error: ciErr } = await Promise.race([
+          checkinsPromise,
+          timeoutPromise
+        ]) as any;
+        
+        if (ciErr) {
+          console.error('Check-ins query error:', ciErr);
+          throw ciErr;
+        }
 
-        // Total check-ins all time
-        const { count: totalCheckIns, error: ciCountErr } = await supabase
+        // Total check-ins all time with timeout
+        const countPromise = supabase
           .from('check_ins')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id);
-        if (ciCountErr) throw ciCountErr;
+        
+        const { count: totalCheckIns, error: ciCountErr } = await Promise.race([
+          countPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout')), 10000))
+        ]) as any;
+        
+        if (ciCountErr) {
+          console.error('Count query error:', ciCountErr);
+          throw ciCountErr;
+        }
 
         // Exercises completed (range)
   const exercisesCompleted = 0; // Placeholder: table not defined yet
@@ -147,8 +191,22 @@ export function useUserProgress(range: Range = '30d') {
             points.push({ date: key, wellbeing: null });
             (Object.keys(dailySeries) as MetricKey[]).forEach(m => dailySeries[m].push({ date: key, value: null }));
           } else {
-            const avg = items.reduce((acc, it) => acc + computeWellbeing({ mood_rating: it.mood, stress_management: it.stress_management, energy_level: it.energy, motivation: it.motivation, confidence: it.confidence as number | undefined, focus: it.focus as number | undefined, recovery: it.recovery as number | undefined, sleep: it.sleep as number | undefined }), 0) / items.length;
-            points.push({ date: key, wellbeing: Math.round(avg) });
+            const avgRaw = items.reduce((acc, it) => {
+              const m = [
+                it.mood,
+                it.stress_management,
+                it.energy,
+                (it.motivation ?? Math.round((it.mood + it.energy) / 2)),
+                (it.confidence ?? 5),
+                (it.focus ?? 5),
+                (it.recovery ?? 5),
+                (it.sleep ?? 5),
+              ];
+              const dayMean = m.reduce((a,b)=>a+b,0) / 8;
+              return acc + dayMean;
+            }, 0) / items.length;
+            // Store as 1-10 scale for chart/KPIs (no rounding to keep precision)
+            points.push({ date: key, wellbeing: +avgRaw.toFixed(2) });
             // per-metric means
             const mean = (arr: number[]) => arr.reduce((a,b)=>a+b,0)/arr.length;
             const mv = {
@@ -176,29 +234,53 @@ export function useUserProgress(range: Range = '30d') {
         }
 
   const nonNull = points.filter(p => p.wellbeing !== null) as Array<{date:string; wellbeing:number}>;
-  const avgWellbeing = Math.round(nonNull.reduce((a, p) => a + (p.wellbeing as number), 0) / Math.max(1, nonNull.length));
+  // wellbeing stored as 1-10 scale; average across days with recorded scores only
+  const avgWellbeing = nonNull.length
+    ? +(nonNull.reduce((a, p) => a + (p.wellbeing as number), 0) / nonNull.length).toFixed(2)
+    : 0;
+  const consistencyPercent = Math.round((nonNull.length / Math.max(1, points.length)) * 100);
+  const consistencyStatus: Consistency['status'] = consistencyPercent >= 80 ? 'Great' : consistencyPercent >= 50 ? 'Good' : 'Needs attention';
 
-        // Mental Wellbeing Index (average of all metrics, stress inverted) scaled to 0-100
-  const to100 = (v: number) => Math.max(0, Math.min(100, ((v - 1) / 9) * 100));
-  const mentalIndexPerDay: number[] = [];
-        // Mental Index based on core metrics only, using the freshly built dailySeries
+  // Calculate momentum: compare last 3 points (treating null as 0) vs previous 3 points
+  let momentumData: Momentum = { direction: '→', label: 'Steady' };
+  if (points.length >= 2) {
+    const last3Points = points.slice(-3);
+    const prev3Points = points.length >= 6 ? points.slice(-6, -3) : [];
+    // Treat null as 0 for momentum calculation
+    const last3Values = last3Points.map(p => p.wellbeing ?? 0);
+    const prev3Values = prev3Points.map(p => p.wellbeing ?? 0);
+    if (last3Values.length > 0) {
+      const avgLast3 = last3Values.reduce((a, v) => a + v, 0) / last3Values.length;
+      const avgPrev3 = prev3Values.length > 0 ? prev3Values.reduce((a, v) => a + v, 0) / prev3Values.length : avgLast3;
+      const diff = avgLast3 - avgPrev3;
+      if (Math.abs(diff) < 0.5) {
+        momentumData = { direction: '→', label: 'Steady' };
+      } else if (diff > 0) {
+        momentumData = { direction: '↑', label: `Improving steadily` };
+      } else {
+        momentumData = { direction: '↓', label: `Declining over last 3 days` };
+      }
+    }
+  }
+
+        // Mental Wellbeing Index (average of all metrics, stress already positive-oriented) kept on 1-10 scale
+  const wellbeingPerDay: number[] = [];
   const metricsKeys: MetricKey[] = ['mood','stress_management','energy','motivation','confidence','focus','recovery','sleep'];
         for (let i = 0; i < (dailySeries.mood?.length || 0); i++) {
           let sum = 0; let count = 0;
           metricsKeys.forEach(m => {
             const p = (dailySeries as any)[m][i] as { value: number | null };
             if (p && typeof p.value === 'number') {
-              // stress_management is already positive-oriented; scale uniformly
-              sum += to100(p.value);
+              sum += p.value;
               count++;
             }
           });
-          if (count > 0) mentalIndexPerDay.push(sum / count);
+          if (count > 0) wellbeingPerDay.push(sum / count);
         }
-  const mentalIndex = Math.round(mentalIndexPerDay.reduce((a,b)=>a+b,0) / Math.max(1, mentalIndexPerDay.length));
-  // Weekly average wellbeing (last 7 days of mentalIndexPerDay)
-  const last7 = mentalIndexPerDay.slice(-7);
-  const weeklyAvgWellbeing = Math.round(last7.reduce((a,b)=>a+b,0) / Math.max(1, last7.length));
+  const mentalIndex = +((wellbeingPerDay.reduce((a,b)=>a+b,0) / Math.max(1, wellbeingPerDay.length)).toFixed(1));
+  // Weekly average wellbeing (last 7 days) on 1-10 scale
+  const last7 = wellbeingPerDay.slice(-7);
+  const weeklyAvgWellbeing = +((last7.reduce((a,b)=>a+b,0) / Math.max(1, last7.length)).toFixed(1));
 
         // Rolling 7-day averages for each metric
         const withRolling = (arr: SeriesPoint[]): SeriesPoint[] => arr.map((p, idx) => {
@@ -275,16 +357,43 @@ export function useUserProgress(range: Range = '30d') {
           const w = weekOf(p.date);
           const d = new Date(p.date);
           const y = weekday[d.getDay()];
-          // wellbeing 0-100 -> 1-10
-          const v = Math.max(1, Math.min(10, Math.round((p.wellbeing / 100) * 9 + 1)));
+          // wellbeing already on 1-10 scale
+          const v = Math.max(1, Math.min(10, Math.round(p.wellbeing)));
           cells.push({ x: w, y, value: v });
         });
 
         if (!cancelled) {
-          // Simple derived XP placeholder: scale total check-ins and average wellbeing
-          // Fetch real profile XP/level
-          const profile = user?.id ? await gamificationService.getUserProfile(user.id) : null;
-          const xp = profile?.xp || 0;
+          // Fetch real profile XP/level from Supabase or localStorage
+          let xp = 0;
+          if (user?.id) {
+            try {
+              // Try Supabase first
+              const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('total_xp, current_level')
+                .eq('id', user.id)
+                .single();
+              
+              if (profile && !error) {
+                xp = profile.total_xp || 0;
+              } else {
+                // Fallback to localStorage (demo mode)
+                const localProfile = localStorage.getItem(`profile_${user.id}`);
+                if (localProfile) {
+                  const parsed = JSON.parse(localProfile);
+                  xp = parsed.xp || 0;
+                }
+              }
+            } catch (e) {
+              // Fallback to localStorage on error
+              const localProfile = localStorage.getItem(`profile_${user.id}`);
+              if (localProfile) {
+                const parsed = JSON.parse(localProfile);
+                xp = parsed.xp || 0;
+              }
+              console.error('Error fetching XP/level:', e);
+            }
+          }
           const { level, currentThreshold: currentLevelXP, nextThreshold: nextLevelXP } = gamificationService.getRankProgress(xp);
           // Rank mapping
           const rankTiers = [
@@ -323,20 +432,47 @@ export function useUserProgress(range: Range = '30d') {
           setVariations(variationsCalc);
           setResilience({ daily: resilienceDaily, avg: resilienceAvg });
           setHeatmap({ xLabels, yLabels, cells });
-          const target = 80;
-          const percent = Math.min(100, Math.round((mentalIndex / target) * 100));
-          setWellbeingProgress({ current: mentalIndex, target, percent });
+          const target = 10;
+          const percent = Math.min(100, Math.round((avgWellbeing / target) * 100));
+          setWellbeingProgress({ current: avgWellbeing, target, percent });
+          setConsistency({ percent: consistencyPercent, status: consistencyStatus });
+          setMomentum(momentumData);
         }
       } catch (e: any) {
-        if (!cancelled) setError(e.message || 'Failed to load progress');
+        console.error('useUserProgress error:', e);
+        if (!cancelled) {
+          // Provide fallback empty state on timeout/error instead of breaking UI
+          setError(e.message || 'Failed to load progress');
+          setKpis({
+            avgWellbeing: 0,
+            weeklyAvgWellbeing: 0,
+            avgMood: 0,
+            avgStress: 0,
+            avgEnergy: 0,
+            avgMotivation: 0,
+            stressInvAvg: 0,
+            streakDays: 0,
+            totalCheckIns: 0,
+            exercisesCompleted: 0,
+            xp: 0,
+            level: 1,
+            nextLevelXP: 120,
+            currentLevelXP: 0,
+            rank: 'Bronze',
+            rankSymbol: '🥉',
+          });
+          setChart({ points: [] });
+          setConsistency(null);
+          setMomentum(null);
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
     };
     run();
-    // Re-run when range or user changes
+    // Re-run when range, user, or profile changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, range]);
+  }, [user?.id, range, refreshTrigger]);
 
-  return { isLoading, error, kpis, chart, badges, series, weekly, variations, resilience, heatmap, wellbeingProgress };
+  return { isLoading, error, kpis, chart, badges, series, weekly, variations, resilience, heatmap, wellbeingProgress, consistency, momentum };
 }

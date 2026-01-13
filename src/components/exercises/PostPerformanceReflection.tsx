@@ -252,28 +252,26 @@ const PostPerformanceReflection: React.FC<PostPerformanceReflectionProps> = ({ o
                 </div>
               ))}
             </div>
-            {pastReflections.length > 0 && (
+            {pastReflections.length > 1 && (
               <div className="text-left pt-8 mt-8 border-t border-white/10 max-w-4xl mx-auto">
-                <h4 className="text-sm font-semibold uppercase tracking-wide text-red-300 mb-4">Previous Reflections</h4>
-                <div className="space-y-4 max-h-80 overflow-auto pr-2">
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-red-300 mb-4">Past Reflections ({pastReflections.length - 1})</h4>
+                <div className="space-y-4 max-h-96 overflow-auto pr-2">
                   {pastReflections.slice(1).map((entry, idx) => (
                     <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-4 text-xs space-y-3">
-                      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-gray-400">
-                        <span>{new Date(entry.completedAt).toLocaleString()}</span>
+                      <div className="flex items-center justify-between text-xs text-gray-300 mb-2 pb-2 border-b border-white/10">
+                        <span className="font-semibold">Reflection #{pastReflections.length - idx - 1}</span>
+                        <span className="text-gray-400">{new Date(entry.completedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
-                      <div className="grid md:grid-cols-2 gap-3">
+                      <div className="space-y-3">
                         {STEPS.map(s => (
-                          <div key={s.id} className="bg-black/10 rounded-md p-2 border border-white/5">
-                            <p className="text-red-300 font-semibold mb-1 text-[10px] uppercase tracking-wide">{s.title}</p>
-                            <p className="text-gray-300 whitespace-pre-wrap max-h-28 overflow-auto leading-relaxed">{entry.responses?.[s.id] || '—'}</p>
+                          <div key={s.id} className="bg-black/20 rounded-md p-3 border border-white/5">
+                            <p className="text-red-300 font-semibold mb-1.5 text-xs uppercase tracking-wide">{s.title}</p>
+                            <p className="text-gray-300 whitespace-pre-wrap leading-relaxed text-sm">{entry.responses?.[s.id] || '—'}</p>
                           </div>
                         ))}
                       </div>
                     </div>
                   ))}
-                  {pastReflections.length === 1 && (
-                    <p className="text-gray-500 text-xs">This is your first saved reflection. Future reflections will appear here.</p>
-                  )}
                 </div>
               </div>
             )}

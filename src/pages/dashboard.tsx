@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
-import { Target, Activity, TrendingUp, CheckSquare, Award, Flame, Circle, Shield, Star, Diamond, Trophy, Crown } from 'lucide-react';
+import { Target, Activity, TrendingUp, CheckSquare, Award, Flame, Circle, Shield, Star, Diamond, Trophy, Crown, Zap, Dumbbell, Heart, BookOpen, Check } from 'lucide-react';
 import { getRankMeta } from '@/services/gamification';
 import dynamic from 'next/dynamic';
 import Layout from '@/components/Layout';
@@ -34,6 +34,37 @@ const DashboardContent: React.FC = () => {
   const [selectedRange, setSelectedRange] = useState<Range>('30d');
   const { isLoading, error, kpis, chart } = useUserProgress(selectedRange);
   // ensure profile is fetched
+
+  // Daily tasks state
+  const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
+  const dailyTasks = [
+    { id: 'checkin', icon: Zap, label: 'Daily Check-in', xp: 50, color: 'from-blue-500 to-cyan-500' },
+    { id: 'exercise', icon: Dumbbell, label: 'Do an Exercise', xp: 30, color: 'from-purple-500 to-pink-500' },
+    { id: 'resource', icon: Heart, label: 'Check a Resource', xp: 20, color: 'from-red-500 to-orange-500' },
+    { id: 'education', icon: BookOpen, label: 'View Education', xp: 25, color: 'from-green-500 to-emerald-500' },
+  ];
+
+  // Auto-complete tasks based on user activity
+  useEffect(() => {
+    if (!kpis) return;
+    
+    const newCompleted = new Set<string>();
+    
+    // Check-in: if user has any check-ins or just completed one
+    if (kpis.totalCheckIns > 0 || localStorage.getItem('checkinCompleted') === 'true') newCompleted.add('checkin');
+    
+    // Exercise: if user has completed any exercises or clicked one
+    if (kpis.exercisesCompleted > 0 || localStorage.getItem('exerciseClicked') === 'true') newCompleted.add('exercise');
+    
+    // We'll track education and resources via localStorage since they're not in KPI
+    const educationViewed = localStorage.getItem('educationViewed') === 'true';
+    const resourceViewed = localStorage.getItem('resourceViewed') === 'true';
+    
+    if (educationViewed) newCompleted.add('education');
+    if (resourceViewed) newCompleted.add('resource');
+    
+    setCompletedTasks(newCompleted);
+  }, [kpis]);
 
   const hasData = (kpis?.totalCheckIns ?? 0) > 0 || (chart?.points?.length ?? 0) > 0;
 
@@ -116,7 +147,7 @@ const DashboardContent: React.FC = () => {
                   <KpiCard
                     title="Rank"
                     value={<span className="font-extrabold" style={{ color: meta.color }}>{meta.title}</span>}
-                    valueClassName="text-4xl md:text-5xl font-black text-white drop-shadow-[0_8px_24px_rgba(239,68,68,0.25)]"
+                    valueClassName="text-3xl md:text-4xl font-black text-white drop-shadow-[0_8px_24px_rgba(239,68,68,0.25)]"
                     subtitle={
                       <div className="mt-1">
                         <div className="flex items-center justify-between text-[9px] md:text-[10px] text-gray-400 mb-1">
@@ -162,6 +193,85 @@ const DashboardContent: React.FC = () => {
             </div>
           </div>
           {chart?.points && <WellbeingChart data={chart.points} title={`${selectedRange} Overview`} />}
+        </motion.div>
+
+        {/* Daily Tasks Card - Horizontal */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.6 }} className="mb-8">
+          <div className="bg-gradient-to-r from-gray-800/90 to-gray-900/90 rounded-2xl p-6 border border-gray-700/80 backdrop-blur-sm relative overflow-hidden min-h-[170px] flex flex-col">
+            {/* Animated gradient background */}
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_50%,rgba(59,130,246,0.1),transparent_50%)]" />
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_80%_80%,rgba(168,85,247,0.1),transparent_50%)]" />
+
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <h3 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                <Zap className="w-5 h-5 text-yellow-400" />
+                Daily Tasks
+              </h3>
+              <span className="text-xs text-gray-400">Complete tasks to earn XP</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 relative z-10">
+              {dailyTasks.map((task) => {
+                const TaskIcon = task.icon;
+                const isCompleted = completedTasks.has(task.id);
+                
+                return (
+                  <div
+                    key={task.id}
+                    className={`group relative rounded-xl p-4 border transition-all duration-300 ${
+                      isCompleted
+                        ? 'border-green-500/60 bg-gradient-to-r from-green-500/10 to-emerald-500/10'
+                        : 'border-gray-700 bg-gray-800/40'
+                    } overflow-hidden`}
+                  >
+                    {/* Completion glow */}
+                    {isCompleted && (
+                      <div className="absolute inset-0 rounded-xl bg-[radial-gradient(circle_at_center,rgba(34,197,94,0.15),transparent_70%)] pointer-events-none" />
+                    )}
+
+                    <div className="flex items-center justify-between relative z-10 gap-3">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className={`p-2 rounded-lg transition-all duration-300 flex-shrink-0 ${
+                          isCompleted
+                            ? 'bg-green-500/30'
+                            : `bg-gradient-to-br ${task.color} opacity-20`
+                        }`}>
+                          <TaskIcon className={`w-4 h-4 transition-colors duration-300 ${
+                            isCompleted ? 'text-green-400' : 'text-gray-300'
+                          }`} />
+                        </div>
+                        <div className="text-left min-w-0">
+                          <p className={`font-semibold text-sm transition-colors duration-300 truncate ${
+                            isCompleted ? 'text-green-300' : 'text-gray-100'
+                          }`}>
+                            {task.label}
+                          </p>
+                          <p className="text-xs text-gray-400">+{task.xp} XP</p>
+                        </div>
+                      </div>
+                      
+                      {/* Completion checkmark */}
+                      <div className={`flex items-center justify-center w-6 h-6 rounded-full border-2 transition-all duration-300 flex-shrink-0 ${
+                        isCompleted
+                          ? 'border-green-400 bg-green-500/20'
+                          : 'border-gray-600'
+                      }`}>
+                        {isCompleted && (
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: 'spring', stiffness: 200 }}
+                          >
+                            <Check className="w-3.5 h-3.5 text-green-400" />
+                          </motion.div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </motion.div>
 
         {/* Call To Action if no data */}

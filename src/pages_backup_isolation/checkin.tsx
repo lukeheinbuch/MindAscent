@@ -162,6 +162,9 @@ const CheckInPageContent: React.FC = () => {
         await CheckInService.saveCheckIn(userId, formData);
       }
       
+      // Mark checkin task as complete
+      localStorage.setItem('checkinCompleted', 'true');
+      
       setShowSuccess(true);
       setIsEditing(false);
       
@@ -393,19 +396,19 @@ const CheckInPageContent: React.FC = () => {
               {/* Notes Section */}
               <div>
                 <label className="block text-lg font-medium text-gray-100 mb-3">
-                  Quick Note <span className="text-gray-400 text-sm">(optional, max 120 chars)</span>
+                  Journal Entry <span className="text-gray-400 text-sm">(optional, max 500 chars)</span>
                 </label>
                 <div className="relative">
                   <textarea
                     value={formData.note}
                     onChange={handleNotesChange}
-                    placeholder="How are you feeling today? Any specific goals or challenges?"
-                    className="w-full p-4 bg-gray-700 text-white border border-gray-600 rounded-lg focus:border-red-500 focus:outline-none resize-none h-20"
+                    placeholder="How are you feeling today? Any specific goals or challenges? Reflect on your mental state..."
+                    className="w-full p-4 bg-gray-700 text-white border border-gray-600 rounded-lg focus:border-red-500 focus:outline-none resize-none h-32"
                     disabled={loading}
-                    maxLength={120}
+                    maxLength={500}
                   />
                   <div className="absolute bottom-2 right-2 text-xs text-gray-400">
-                    {formData.note.length}/120
+                    {formData.note.length}/500
                   </div>
                 </div>
               </div>

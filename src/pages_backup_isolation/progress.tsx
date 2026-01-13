@@ -6,19 +6,20 @@ import Layout from '@/components/Layout';
 import PageContainer from '@/components/PageContainer';
 import { RequireAuth } from '@/components/auth';
 import { ClientOnly } from '@/components/ClientOnly';
-import { TrendingUp, Target, Smile, CheckSquare, Star } from 'lucide-react';
+import { TrendingUp, Target, Smile, CheckSquare, Star, BookOpen } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import KpiCard from '@/components/dashboard/KpiCard';
 import { useUserProgress, Range } from '@/hooks/useUserProgress';
+import { useRouter } from 'next/router';
 
 const WellbeingChart = dynamic(() => import('@/components/dashboard/WellbeingChart'), { ssr: false });
 const MetricRadar = dynamic(() => import('@/components/stats/MetricRadar'), { ssr: false });
 const TrendChart = dynamic(() => import('@/components/stats/TrendChart'), { ssr: false });
-const ProgressBar = dynamic(() => import('@/components/stats/ProgressBar'), { ssr: false });
 
 const ProgressPageContent: React.FC = () => {
   const [selectedRange, setSelectedRange] = useState<Range>('30d');
-  const { kpis, chart, series, weekly, resilience, wellbeingProgress } = useUserProgress(selectedRange);
+  const { kpis, chart, series, weekly, resilience, wellbeingProgress, consistency, momentum } = useUserProgress(selectedRange);
+  const router = useRouter();
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -53,6 +54,30 @@ const ProgressPageContent: React.FC = () => {
       if (!best || avg > best.value) best = { label, value: avg };
     }
     return best;
+  }, [series]);
+
+  // Identify suggested focus: lowest average metric in the last 7 days (excluding sleep)
+  const focusSuggestion = React.useMemo(() => {
+    if (!series) return null;
+    const keys: Array<{ key: keyof typeof series; label: string; tip: string; color: string }> = [
+      { key: 'mood', label: 'Mood', tip: 'Try a 5-minute mindfulness break', color: 'red' },
+      { key: 'stress_management', label: 'Stress Recovery', tip: 'Try 1 short reset per day', color: 'amber' },
+      { key: 'energy', label: 'Energy', tip: 'Take a short walk today', color: 'green' },
+      { key: 'motivation', label: 'Motivation', tip: 'Set one small goal', color: 'purple' },
+      { key: 'confidence', label: 'Confidence', tip: 'List one recent win', color: 'blue' },
+      { key: 'focus', label: 'Focus', tip: 'Use a 10-minute focus block', color: 'pink' },
+      { key: 'recovery', label: 'Recovery', tip: 'Plan a wind-down tonight', color: 'emerald' },
+    ];
+    let worst: { label: string; value: number; tip: string; color: string } | null = null;
+    for (const { key, label, tip, color } of keys) {
+      const metricSeries = series[key] || [];
+      const last7 = metricSeries.slice(-7);
+      const arr = last7.map(p => p.value).filter((v): v is number => typeof v === 'number');
+      if (!arr.length) continue;
+      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+      if (!worst || avg < worst.value) worst = { label, value: avg, tip, color };
+    }
+    return worst;
   }, [series]);
 
   return (
@@ -91,20 +116,55 @@ const ProgressPageContent: React.FC = () => {
           )}
         </div>
 
-        {/* Wellbeing Chart + Progress Bar */}
+        {/* Wellbeing Chart + Focus/Momentum/Consistency Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6 mb-8">
           <div className="lg:col-span-2">
             <WellbeingChart data={chart.points} />
           </div>
-          <div className="lg:col-span-1">
-            {(wellbeingProgress || typeof kpis?.avgWellbeing === 'number') && (
-              <ProgressBar
-                title="Average Overall Wellbeing"
-                current={kpis?.avgWellbeing ?? 0}
-                target={wellbeingProgress?.target ?? 80}
-                percent={Math.min(100, Math.round(((kpis?.avgWellbeing ?? 0) / (wellbeingProgress?.target ?? 80)) * 100))}
-              />
-            )}
+          <div className="lg:col-span-1 flex flex-col justify-between h-full" style={{ minHeight: '384px' }}>
+            <div className={`bg-gradient-to-br ${
+              focusSuggestion?.color === 'red' ? 'from-red-900/30 to-gray-900/50 border-red-700/40' :
+              focusSuggestion?.color === 'amber' ? 'from-amber-900/30 to-gray-900/50 border-amber-700/40' :
+              focusSuggestion?.color === 'green' ? 'from-green-900/30 to-gray-900/50 border-green-700/40' :
+              focusSuggestion?.color === 'purple' ? 'from-purple-900/30 to-gray-900/50 border-purple-700/40' :
+              focusSuggestion?.color === 'blue' ? 'from-blue-900/30 to-gray-900/50 border-blue-700/40' :
+              focusSuggestion?.color === 'pink' ? 'from-pink-900/30 to-gray-900/50 border-pink-700/40' :
+              focusSuggestion?.color === 'emerald' ? 'from-emerald-900/30 to-gray-900/50 border-emerald-700/40' :
+              'from-gray-900/70 to-gray-800/60 border-gray-700/50'
+            } border rounded-2xl p-4 shadow-md flex-1`}>
+              <h4 className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-2">This Week's Focus</h4>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-lg font-semibold text-white">{focusSuggestion ? focusSuggestion.label : 'Stay balanced'}</span>
+                {focusSuggestion?.value !== undefined && <span className="text-xs text-gray-400">{focusSuggestion.value.toFixed(1)}/10</span>}
+              </div>
+              <p className="text-gray-400 text-xs leading-relaxed">{focusSuggestion ? focusSuggestion.tip : 'Try one small reset each day to build momentum.'}</p>
+            </div>
+
+            <div className={`bg-gradient-to-br ${
+              momentum?.direction === '↑' ? 'from-green-900/30 to-gray-900/50 border-green-700/40' :
+              momentum?.direction === '↓' ? 'from-red-900/30 to-gray-900/50 border-red-700/40' :
+              'from-yellow-900/30 to-gray-900/50 border-yellow-700/40'
+            } border rounded-2xl p-4 shadow-md flex-1 my-4`}>
+              <h4 className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-2">Momentum</h4>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-semibold text-white">{momentum?.direction || '→'}</span>
+                <p className="text-gray-300 text-sm">{momentum?.label || 'Steady'}</p>
+              </div>
+            </div>
+
+            <div className={`bg-gradient-to-br ${
+              consistency?.status === 'Great' ? 'from-green-900/30 to-gray-900/50 border-green-700/40' :
+              consistency?.status === 'Good' ? 'from-yellow-900/30 to-gray-900/50 border-yellow-700/40' :
+              'from-red-900/30 to-gray-900/50 border-red-700/40'
+            } border rounded-2xl p-4 shadow-md flex-1`}>
+              <h4 className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-3">Check-in Consistency ({selectedRange})</h4>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-2xl font-bold text-white">{consistency ? `${consistency.percent}%` : '—'}</div>
+                  <div className="text-xs text-gray-400 mt-1">{consistency ? consistency.status : 'No data yet'}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -112,7 +172,7 @@ const ProgressPageContent: React.FC = () => {
         {series && (
           <div className="mb-8">
             <MetricRadar
-              title={`Weekly Averages Overview (${selectedRange})`}
+              title={`${selectedRange} Averages Overview`}
               data={[
                 { metric: 'Mood', score: (() => { const arr = series.mood.map(p=>p.value).filter((v): v is number => typeof v === 'number'); return arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : 0; })() },
                 { metric: 'Stress Mgmt', score: (() => { const arr = series.stress_management.map(p=>p.value).filter((v): v is number => typeof v === 'number'); return arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : 0; })() },
@@ -121,6 +181,7 @@ const ProgressPageContent: React.FC = () => {
                 { metric: 'Confidence', score: (() => { const arr = series.confidence.map(p=>p.value).filter((v): v is number => typeof v === 'number'); return arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : 0; })() },
                 { metric: 'Focus', score: (() => { const arr = series.focus.map(p=>p.value).filter((v): v is number => typeof v === 'number'); return arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : 0; })() },
                 { metric: 'Recovery', score: (() => { const arr = series.recovery.map(p=>p.value).filter((v): v is number => typeof v === 'number'); return arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : 0; })() },
+                { metric: 'Sleep Quality', score: (() => { const arr = series.sleep.map(p=>p.value).filter((v): v is number => typeof v === 'number'); return arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : 0; })() },
               ].filter(d => (d.score ?? 0) > 0)}
             />
           </div>
@@ -162,6 +223,38 @@ const ProgressPageContent: React.FC = () => {
             </motion.button>
           </motion.div>
         )}
+
+        {/* Journal Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mt-8"
+        >
+          <motion.div
+            whileHover={{ scale: 1.01, y: -2 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => router.push('/journal-history')}
+            className="bg-gradient-to-br from-purple-900/20 via-blue-900/20 to-gray-900/50 border border-purple-700/30 rounded-2xl p-8 cursor-pointer hover:border-purple-600/50 hover:shadow-xl hover:shadow-purple-900/20 transition-all"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-purple-500/10 p-4 rounded-xl border border-purple-500/20">
+                  <BookOpen className="w-8 h-8 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white mb-1">Past Journal Entries</h3>
+                  <p className="text-gray-400 text-sm">Review your reflections and growth journey</p>
+                </div>
+              </div>
+              <div className="text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
 
       </PageContainer>
     </Layout>
