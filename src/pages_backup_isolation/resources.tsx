@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
-import { Phone, ExternalLink, Search, Filter, Heart, Brain, Shield } from 'lucide-react';
+import { Phone, ExternalLink, Search, Filter, Heart, Brain, Shield, MapPin } from 'lucide-react';
 import Layout from '@/components/Layout';
 import PageContainer from '@/components/PageContainer';
 import { useAuth } from '@/contexts/AuthContext';
