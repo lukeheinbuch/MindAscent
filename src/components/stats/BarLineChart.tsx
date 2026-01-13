@@ -36,7 +36,7 @@ const BarLineChart: React.FC<BarLineChartProps> = ({
   lineDomain,
   unit = ''
 }) => {
-  const formatTooltip = (value: any, name: string) => {
+  const formatTooltip = (value: any, name: string | undefined) => {
     if (typeof value === 'number') {
       return [`${value.toFixed(1)}${unit}`, name];
     }
