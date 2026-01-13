@@ -95,7 +95,7 @@ const ScatterPlot: React.FC<ScatterPlotProps> = ({
     return 'text-gray-400';
   };
 
-  const formatTooltip = (value: any, name: string, props: any) => {
+  const formatTooltip = (value: any, name?: string, props?: any) => {
     if (props && props.payload) {
       const point = props.payload;
       return [
