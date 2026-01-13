@@ -269,7 +269,6 @@ const ExercisesPage: React.FC = () => {
             <button
               onClick={() => {
                 setSelectedCategory('all');
-                setSelectedDifficulty('all');
               }}
               className="btn-primary mt-4"
             >
