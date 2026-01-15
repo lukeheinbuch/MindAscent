@@ -156,14 +156,46 @@ const CheckInPageContent: React.FC = () => {
     try {
       if (todayStatus?.checkedIn && todayStatus.checkIn && isEditing) {
         // Update existing check-in
+        console.log('[Checkin] Updating existing check-in with data:', { note: formData.note });
         await CheckInService.updateCheckIn(userId, todayStatus.checkIn.id, formData);
       } else {
         // Create new check-in
+        console.log('[Checkin] Creating new check-in with data:', { note: formData.note });
         await CheckInService.saveCheckIn(userId, formData);
+        
+        // Log daily task completion and award XP for new check-ins only
+        try {
+          await fetch('/api/supabase/log-daily-task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskId: 'checkin', xpGained: 50 }),
+          });
+          
+          // Bump local profile XP and trigger refresh
+          try {
+            const key = `profile_${userId}`;
+            const raw = localStorage.getItem(key);
+            const parsed = raw ? JSON.parse(raw) : {};
+            const currentXp = parsed.xp || 0;
+            parsed.xp = currentXp + 50;
+            localStorage.setItem(key, JSON.stringify(parsed));
+          } catch {}
+          setTimeout(() => {
+            window.dispatchEvent(new StorageEvent('storage', { key: 'xp_updated' }));
+          }, 100);
+        } catch (err) {
+          console.error('Failed to log daily task XP:', err);
+        }
       }
       
-      // Mark checkin task as complete
-      localStorage.setItem('checkinCompleted', 'true');
+      // Mark checkin task as complete for today using user-specific key
+      const today = new Date().toISOString().split('T')[0];
+      const taskKey = `task_${userId}_checkin_${today}`;
+      localStorage.setItem(taskKey, 'true');
+      // Dispatch task-specific event to refresh daily cards
+      setTimeout(() => {
+        window.dispatchEvent(new StorageEvent('storage', { key: taskKey }));
+      }, 100);
       
       setShowSuccess(true);
       setIsEditing(false);

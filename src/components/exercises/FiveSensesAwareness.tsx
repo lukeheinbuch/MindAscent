@@ -72,16 +72,45 @@ const FiveSensesAwareness: React.FC<Props> = ({ onExit, onComplete }) => {
     play();
     if (user) {
       try {
-        const key = `completedExercises_${user.uid}`;
+        const userId = user.uid || (user as any).id;
+        const key = `completedExercises_${userId}`;
         const completions = JSON.parse(localStorage.getItem(key) || '[]');
         completions.push({
           exerciseId: 'five-senses-awareness',
           exerciseName: 'Five Senses Awareness',
           completedAt: new Date().toISOString(),
           entries,
-          xpEarned: 8,
+          xpEarned: 30,
         });
         localStorage.setItem(key, JSON.stringify(completions));
+        
+        // Track exercise completion
+        try {
+          const { trackItemCompletion, getItemCount, checkAndUnlockAchievements } = require('@/utils/achievements');
+          trackItemCompletion(userId, 'exercise', 'five-senses-awareness');
+          
+          // Check for achievement unlocks
+          const exerciseCount = getItemCount(userId, 'exercise');
+          checkAndUnlockAchievements(userId, { exercisesCompleted: exerciseCount });
+        } catch (err) {
+          console.error('Failed to check achievements:', err);
+        }
+        
+        // Mark exercise task as complete for today
+        const today = new Date().toISOString().split('T')[0];
+        localStorage.setItem(`task_${userId}_exercise_${today}`, 'true');
+        
+        // Log daily task completion and award XP
+        fetch('/api/supabase/log-daily-task', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId: 'exercise', xpGained: 30 }),
+        }).then(() => {
+          // Trigger refresh of user progress
+          setTimeout(() => {
+            window.dispatchEvent(new StorageEvent('storage', { key: 'xp_updated' }));
+          }, 100);
+        }).catch(err => console.error('Failed to log exercise XP:', err));
       } catch {}
     }
     onComplete?.();

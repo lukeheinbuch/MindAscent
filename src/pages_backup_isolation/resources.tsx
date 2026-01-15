@@ -56,15 +56,54 @@ const ResourcesPage: React.FC = () => {
   };
 
   const handleResourceClick = async (resource: Resource) => {
-    // Mark resource task as complete
-    localStorage.setItem('resourceViewed', 'true');
+    if (!user?.id) return;
     
-    if (user?.id) {
+    const today = new Date().toISOString().split('T')[0];
+    const resourceTaskKey = `task_${user.id}_resource_${today}`;
+    const isFirstViewToday = localStorage.getItem(resourceTaskKey) !== 'true';
+    
+    // Mark resource task as complete
+    localStorage.setItem(resourceTaskKey, 'true');
+    
+    try {
+      await gamificationService.recordResourceAccess(user.id, resource.id);
+      
+      // Track resource completion
       try {
-        await gamificationService.recordResourceAccess(user.id, resource.id);
-      } catch (e) {
-        // swallow error
+        const { trackItemCompletion, getItemCount, checkAndUnlockAchievements } = await import('@/utils/achievements');
+        trackItemCompletion(user.id, 'resource', resource.id);
+        
+        // Check for achievement unlocks
+        const resourceCount = getItemCount(user.id, 'resource');
+        checkAndUnlockAchievements(user.id, { resourcesViewed: resourceCount });
+      } catch (err) {
+        console.error('Failed to check achievements:', err);
       }
+      
+      // Award XP only on first view of the day
+      if (isFirstViewToday) {
+        await fetch('/api/supabase/log-daily-task', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId: 'resource', xpGained: 20 }),
+        }).then(() => {
+          // Bump local profile XP and dispatch refresh events
+          try {
+            const key = `profile_${user.id}`;
+            const raw = localStorage.getItem(key);
+            const parsed = raw ? JSON.parse(raw) : {};
+            const currentXp = parsed.xp || 0;
+            parsed.xp = currentXp + 20;
+            localStorage.setItem(key, JSON.stringify(parsed));
+          } catch {}
+          setTimeout(() => {
+            window.dispatchEvent(new StorageEvent('storage', { key: 'xp_updated' }));
+            window.dispatchEvent(new StorageEvent('storage', { key: resourceTaskKey }));
+          }, 100);
+        }).catch(err => console.error('Failed to log resource XP:', err));
+      }
+    } catch (e) {
+      console.error('Error accessing resource:', e);
     }
 
     if (resource.type === 'hotline') {

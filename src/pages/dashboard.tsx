@@ -44,27 +44,57 @@ const DashboardContent: React.FC = () => {
     { id: 'education', icon: BookOpen, label: 'View Education', xp: 25, color: 'from-green-500 to-emerald-500' },
   ];
 
-  // Auto-complete tasks based on user activity
+  // Helper function to check if task was completed today
+  const isTaskCompletedToday = (taskId: string): boolean => {
+    if (!user?.id) return false;
+    const today = new Date().toISOString().split('T')[0];
+    const key = `task_${user.id}_${taskId}_${today}`;
+    return localStorage.getItem(key) === 'true';
+  };
+
+  // Auto-complete tasks based on user activity (only for today)
   useEffect(() => {
-    if (!kpis) return;
+    if (!kpis || !user?.id) return;
     
     const newCompleted = new Set<string>();
+    const today = new Date().toISOString().split('T')[0];
     
-    // Check-in: if user has any check-ins or just completed one
-    if (kpis.totalCheckIns > 0 || localStorage.getItem('checkinCompleted') === 'true') newCompleted.add('checkin');
-    
-    // Exercise: if user has completed any exercises or clicked one
-    if (kpis.exercisesCompleted > 0 || localStorage.getItem('exerciseClicked') === 'true') newCompleted.add('exercise');
-    
-    // We'll track education and resources via localStorage since they're not in KPI
-    const educationViewed = localStorage.getItem('educationViewed') === 'true';
-    const resourceViewed = localStorage.getItem('resourceViewed') === 'true';
-    
-    if (educationViewed) newCompleted.add('education');
-    if (resourceViewed) newCompleted.add('resource');
+    // Check if each task was completed today
+    if (localStorage.getItem(`task_${user.id}_checkin_${today}`) === 'true') {
+      newCompleted.add('checkin');
+    }
+    if (localStorage.getItem(`task_${user.id}_exercise_${today}`) === 'true') {
+      newCompleted.add('exercise');
+    }
+    if (localStorage.getItem(`task_${user.id}_education_${today}`) === 'true') {
+      newCompleted.add('education');
+    }
+    if (localStorage.getItem(`task_${user.id}_resource_${today}`) === 'true') {
+      newCompleted.add('resource');
+    }
     
     setCompletedTasks(newCompleted);
-  }, [kpis]);
+  }, [kpis, user?.id]);
+
+  // Listen for storage events to live-update daily task cards
+  useEffect(() => {
+    if (!user?.id) return;
+    const today = new Date().toISOString().split('T')[0];
+    const handleStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      const prefix = `task_${user.id}_`;
+      if (e.key.startsWith(prefix)) {
+        const newCompleted = new Set<string>();
+        if (localStorage.getItem(`task_${user.id}_checkin_${today}`) === 'true') newCompleted.add('checkin');
+        if (localStorage.getItem(`task_${user.id}_exercise_${today}`) === 'true') newCompleted.add('exercise');
+        if (localStorage.getItem(`task_${user.id}_education_${today}`) === 'true') newCompleted.add('education');
+        if (localStorage.getItem(`task_${user.id}_resource_${today}`) === 'true') newCompleted.add('resource');
+        setCompletedTasks(newCompleted);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [user?.id]);
 
   const hasData = (kpis?.totalCheckIns ?? 0) > 0 || (chart?.points?.length ?? 0) > 0;
 

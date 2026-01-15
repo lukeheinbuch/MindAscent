@@ -44,10 +44,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       about: string;
     }>
 
-    // Load existing profile to enforce immutability on username
+    // Load existing profile to enforce immutability on username and check if new
     const { data: existingProfile, error: existingErr } = await supabase
       .from('profiles')
-      .select('username')
+      .select('username, current_streak, longest_streak')
       .eq('id', user.id)
       .single();
 
@@ -61,6 +61,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       id: user.id,
       updated_at: new Date().toISOString(),
     };
+    // Initialize streaks for brand new profiles
+    const isNewProfile = !!(existingErr && (existingErr as any).code === 'PGRST116') || !existingProfile;
+    if (isNewProfile) {
+      payload.current_streak = 1;
+      payload.longest_streak = 1;
+    }
 
     // Ensure email is always present on first insert to satisfy NOT NULL
     // Prefer an explicit email from body if provided; otherwise fall back to the auth user email

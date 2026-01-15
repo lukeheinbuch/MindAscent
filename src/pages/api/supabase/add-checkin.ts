@@ -79,46 +79,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: `Failed to save check-in: ${checkInError.message}` })
     }
 
-    // Only process XP and streaks for new check-ins
+    // Only process streaks for new check-ins
+    // XP is now awarded via the daily task system (log-daily-task API)
     if (isNewCheckIn) {
-      // Award XP (idempotent)
-      const startOfDay = new Date(payload.date + 'T00:00:00Z').toISOString()
-      const startOfNextDay = new Date(payload.date + 'T23:59:59Z').toISOString()
-
-      const { data: existingXP } = await supabase
-        .from('xp_ledger')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('source', 'check_in')
-        .gte('created_at', startOfDay)
-        .lte('created_at', startOfNextDay)
-        .single()
-
-      if (!existingXP) {
-        // Award 10 XP for the check-in
-        await supabase
-          .from('xp_ledger')
-          .insert({
-            user_id: user.id,
-            amount: 10,
-            source: 'check_in',
-            description: 'Daily check-in'
-          })
-
-        // Recompute total XP from ledger (safer than read-modify-write)
-        const { data: xpSum } = await supabase
-          .from('xp_ledger')
-          .select('amount')
-          .eq('user_id', user.id)
-
-        const totalXp = xpSum?.reduce((sum, entry) => sum + entry.amount, 0) || 0
-
-        await supabase
-          .from('profiles')
-          .update({ total_xp: totalXp })
-          .eq('id', user.id)
-      }
-
       // Handle streaks
       const { data: profile } = await supabase
         .from('profiles')

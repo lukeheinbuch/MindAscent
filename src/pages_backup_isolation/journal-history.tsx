@@ -127,7 +127,7 @@ const JournalHistoryPage: React.FC = () => {
             >
               <BookOpen className="w-16 h-16 text-gray-600 mx-auto mb-4" />
               <h2 className="text-xl font-semibold text-gray-300 mb-2">No Journal Entries Yet</h2>
-              <p className="text-gray-500">Complete reflection exercises to start building your journal.</p>
+              <p className="text-gray-500">Complete your journal section in the check-in to see your past reflections.</p>
             </motion.div>
           ) : (
             <div className="space-y-4">

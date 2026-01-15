@@ -10,6 +10,7 @@ import { Exercise } from '@/types';
 import { exercisesData, getExercisesByCategory } from '@/data/placeholderData';
 import { getDifficultyColor, formatDuration, capitalize } from '@/utils';
 import { gamificationService } from '@/services/gamification';
+import { trackItemCompletion, getItemCount, checkAndUnlockAchievements } from '@/utils/achievements';
 
 const ExercisesPage: React.FC = () => {
   const router = useRouter();
@@ -43,15 +44,41 @@ const ExercisesPage: React.FC = () => {
   };
 
   const handleExerciseClick = async (exerciseId: string) => {
-    // Mark exercise task as complete
-    localStorage.setItem('exerciseClicked', 'true');
-    
+    // Mark exercise task as complete immediately (user + date specific)
+    const today = new Date().toISOString().split('T')[0];
     if (user?.id) {
+      const taskKey = `task_${user.id}_exercise_${today}`;
+      localStorage.setItem(taskKey, 'true');
+
+      // Award XP via daily task endpoint and update in-memory XP
+      fetch('/api/supabase/log-daily-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: 'exercise', xpGained: 30 }),
+      }).then(() => {
+        // Bump local profile XP for immediate UI update
+        try {
+          const key = `profile_${user.id}`;
+          const raw = localStorage.getItem(key);
+          const parsed = raw ? JSON.parse(raw) : {};
+          const currentXp = parsed.xp || 0;
+          parsed.xp = currentXp + 30;
+          localStorage.setItem(key, JSON.stringify(parsed));
+        } catch {}
+        // Trigger refresh events for dashboard/profile
+        setTimeout(() => {
+          window.dispatchEvent(new StorageEvent('storage', { key: 'xp_updated' }));
+          window.dispatchEvent(new StorageEvent('storage', { key: taskKey }));
+        }, 100);
+      }).catch(err => console.error('Failed to log exercise XP:', err));
+
+      // Track exercise completion + achievements
       try {
         await gamificationService.recordExerciseAccess(user.id, exerciseId);
-      } catch (e) {
-        // swallow
-      }
+        trackItemCompletion(user.id, 'exercise', exerciseId);
+        const exerciseCount = getItemCount(user.id, 'exercise');
+        checkAndUnlockAchievements(user.id, { exercisesCompleted: exerciseCount });
+      } catch {}
     }
     // Special handling for interactive exercises
     if (exerciseId === 'box-breathing') {

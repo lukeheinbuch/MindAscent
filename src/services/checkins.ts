@@ -199,6 +199,8 @@ export class CheckInService {
       }
       if (!supaUserId) return;
 
+      console.log(`[Checkin Sync] Syncing check-in to Supabase for user ${supaUserId}, date ${ci.date}`, { note: (ci as any).note });
+
       // Remove any existing row for this user/date to avoid duplicates without requiring a unique index
       await supabase
         .from('check_ins')
@@ -224,9 +226,14 @@ export class CheckInService {
     confidence: (ci as any).confidence,
     focus: (ci as any).focus,
     recovery: (ci as any).recovery,
+    note: (ci as any).note,
           },
         ]);
-      if (error) console.warn('Supabase sync insert failed:', error.message);
+      if (error) {
+        console.warn('Supabase sync insert failed:', error.message);
+      } else {
+        console.log(`[Checkin Sync] Successfully synced check-in with note: ${(ci as any).note ? 'YES' : 'NO'}`);
+      }
     } catch (e: any) {
       console.warn('Supabase sync failed:', e?.message || e);
     }

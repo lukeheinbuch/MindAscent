@@ -76,57 +76,98 @@ const ProfilePage: React.FC = () => {
     { id: 'education', icon: BookOpen, label: 'View Education', xp: 25, color: 'from-green-500 to-emerald-500' },
   ];
 
-  // Auto-complete tasks based on user activity
+  // Auto-complete tasks based on user activity (per-user, per-day keys)
   useEffect(() => {
-    if (!kpis) return;
-    
+    if (!kpis || !user?.id) return;
+    const today = new Date().toISOString().split('T')[0];
     const newCompleted = new Set<string>();
     
-    // Check-in: if user has any check-ins or just completed one
-    if (kpis.totalCheckIns > 0 || localStorage.getItem('checkinCompleted') === 'true') newCompleted.add('checkin');
-    
-    // Exercise: if user has completed any exercises or clicked one
-    if (kpis.exercisesCompleted > 0 || localStorage.getItem('exerciseClicked') === 'true') newCompleted.add('exercise');
-    
-    // We'll track education and resources via localStorage since they're not in KPI
-    const educationViewed = localStorage.getItem('educationViewed') === 'true';
-    const resourceViewed = localStorage.getItem('resourceViewed') === 'true';
-    
-    if (educationViewed) newCompleted.add('education');
-    if (resourceViewed) newCompleted.add('resource');
+    // Check daily task flags for today
+    if (localStorage.getItem(`task_${user.id}_checkin_${today}`) === 'true') newCompleted.add('checkin');
+    if (localStorage.getItem(`task_${user.id}_exercise_${today}`) === 'true') newCompleted.add('exercise');
+    if (localStorage.getItem(`task_${user.id}_education_${today}`) === 'true') newCompleted.add('education');
+    if (localStorage.getItem(`task_${user.id}_resource_${today}`) === 'true') newCompleted.add('resource');
     
     setCompletedTasks(newCompleted);
-  }, [kpis]);
+  }, [kpis, user?.id]);
+
+  // Listen for storage events to live-update daily task cards
+  useEffect(() => {
+    if (!user?.id) return;
+    const today = new Date().toISOString().split('T')[0];
+    const handleStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      const prefix = `task_${user.id}_`;
+      if (e.key.startsWith(prefix)) {
+        const newCompleted = new Set<string>();
+        if (localStorage.getItem(`task_${user.id}_checkin_${today}`) === 'true') newCompleted.add('checkin');
+        if (localStorage.getItem(`task_${user.id}_exercise_${today}`) === 'true') newCompleted.add('exercise');
+        if (localStorage.getItem(`task_${user.id}_education_${today}`) === 'true') newCompleted.add('education');
+        if (localStorage.getItem(`task_${user.id}_resource_${today}`) === 'true') newCompleted.add('resource');
+        setCompletedTasks(newCompleted);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [user?.id]);
   const [savingProfile, setSavingProfile] = useState<boolean>(false);
 
+  // Load from localStorage immediately on mount (before Supabase data arrives)
+  useEffect(() => {
+    if (!user?.id) return;
+    if (typeof window === 'undefined') return;
+
+    // Load all fields from localStorage first (immediate, survives refresh)
+    const localName = localStorage.getItem(`profile_${user.id}_displayName`);
+    const localBio = localStorage.getItem(`profile_${user.id}_bio`);
+    const localAvatar = localStorage.getItem(`profile_${user.id}_avatar_url`);
+    const localSport = localStorage.getItem(`profile_${user.id}_sport`);
+    const localLevel = localStorage.getItem(`profile_${user.id}_level`);
+    const localAge = localStorage.getItem(`profile_${user.id}_age`);
+    const localCountry = localStorage.getItem(`profile_${user.id}_country`);
+    const localGoals = localStorage.getItem(`profile_${user.id}_goals`);
+    const localAbout = localStorage.getItem(`profile_${user.id}_about`);
+
+    // Set from localStorage (immediate render)
+    if (localName) setDisplayName(localName);
+    if (localBio) setBio(localBio);
+    if (localAvatar) setAvatarUrl(localAvatar);
+    if (localSport) setSport(localSport);
+    if (localLevel) setLevel(localLevel);
+    if (localAge) setAge(Number(localAge) || '');
+    if (localCountry) setCountry(localCountry);
+    if (localGoals) setGoalsText(localGoals);
+    if (localAbout) setAboutMe(localAbout);
+  }, [user?.id]);
+
+  // Update from Supabase when profile loads (after localStorage is set)
   useEffect(() => {
     if (authLoading) return;
-    
+
     if (!user) {
       router.push('/login');
       return;
     }
 
-    // Prefer Supabase profile fields; fall back to local storage then email-derived
-    if (typeof window !== 'undefined') {
-      const savedName = localStorage.getItem('profile_name');
-      const savedBio = localStorage.getItem('profile_bio');
+    if (typeof window !== 'undefined' && supaProfile) {
+      // Sync from Supabase (prefer DB values if set)
       const fromDbName = (supaProfile?.display_name || supaProfile?.username || '').trim();
       const fromDbBio = (supaProfile?.about || '').trim();
-      setDisplayName(fromDbName || savedName || user?.email?.split('@')[0] || 'Athlete');
-      setBio(fromDbBio || savedBio || 'Insert bio');
-      setAvatarUrl(supaProfile?.avatar_url || null);
-
-      // hydrate athlete fields
-      setSport(supaProfile?.sport || '');
-      setLevel(supaProfile?.level || '');
-      setAge(typeof supaProfile?.age === 'number' ? supaProfile.age : '');
-      setCountry(supaProfile?.country || '');
-      setGoalsText((supaProfile?.goals && supaProfile.goals.length ? supaProfile.goals.join(', ') : ''));
-      setAboutMe(supaProfile?.about || '');
+      
+      if (fromDbName) setDisplayName(fromDbName);
+      if (fromDbBio) setBio(fromDbBio);
+      if (supaProfile?.avatar_url) setAvatarUrl(supaProfile.avatar_url);
+      
+      // Sync athlete fields from DB
+      if (supaProfile?.sport) setSport(supaProfile.sport);
+      if (supaProfile?.level) setLevel(supaProfile.level);
+      if (typeof supaProfile?.age === 'number') setAge(supaProfile.age);
+      if (supaProfile?.country) setCountry(supaProfile.country);
+      if (supaProfile?.goals && supaProfile.goals.length) setGoalsText(supaProfile.goals.join(', '));
+      if (supaProfile?.about) setAboutMe(supaProfile.about);
     }
 
-    // Load unlocked achievements (demo only for now)
+    // Load unlocked achievements (from localStorage after being unlocked by API)
     if (typeof window !== 'undefined' && user) {
       try {
         const raw = localStorage.getItem(`ach_state_${user.id || user.uid}`);
@@ -137,7 +178,7 @@ const ProfilePage: React.FC = () => {
       } catch {}
     }
     setLoading(false);
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, supaProfile]);
 
   const handleLogout = async () => {
     try {
@@ -157,15 +198,20 @@ const ProfilePage: React.FC = () => {
     setAvatarUrl(previewUrl);
     try {
       const path = `${user.id}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
+      const { error: uploadError } = await supabase.storage.from('photos').upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      const { data } = supabase.storage.from('photos').getPublicUrl(path);
       const publicUrl = data.publicUrl;
       setAvatarUrl(publicUrl);
+      
+      // Save avatar URL to localStorage and Supabase
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`profile_${user.id}_avatar_url`, publicUrl);
+      }
       await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
     } catch (err) {
       console.error('Avatar upload failed', err);
-      alert('Avatar upload failed. Please ensure a Supabase bucket named "avatars" exists.');
+      alert('Avatar upload failed. Please ensure a Supabase bucket named "photos" exists.');
     } finally {
       setUploading(false);
     }
@@ -179,6 +225,17 @@ const ProfilePage: React.FC = () => {
         .split(',')
         .map((g) => g.trim())
         .filter(Boolean);
+      
+      // Save to localStorage immediately (survives refresh)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`profile_${user.id}_sport`, sport);
+        localStorage.setItem(`profile_${user.id}_level`, level);
+        localStorage.setItem(`profile_${user.id}_age`, String(age));
+        localStorage.setItem(`profile_${user.id}_country`, country);
+        localStorage.setItem(`profile_${user.id}_goals`, goalsText);
+        localStorage.setItem(`profile_${user.id}_about`, aboutMe);
+      }
+
       await supabase
         .from('profiles')
         .update({
@@ -199,9 +256,11 @@ const ProfilePage: React.FC = () => {
   };
 
   const handleSaveProfile = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('profile_name', displayName);
-      localStorage.setItem('profile_bio', bio);
+    if (typeof window !== 'undefined' && user?.id) {
+      // Save with user-scoped keys
+      localStorage.setItem(`profile_${user.id}_displayName`, displayName);
+      localStorage.setItem(`profile_${user.id}_bio`, bio);
+      if (avatarUrl) localStorage.setItem(`profile_${user.id}_avatar_url`, avatarUrl);
     }
     setEditing(false);
   };
@@ -266,13 +325,13 @@ const ProfilePage: React.FC = () => {
                     <div className="space-y-2">
                       <input
                         value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
+                        onChange={(e) => { setDisplayName(e.target.value); if (user?.id) localStorage.setItem(`profile_${user.id}_displayName`, e.target.value); }}
                         className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white w-full"
                         placeholder="Your name"
                       />
                       <textarea
                         value={bio}
-                        onChange={(e) => setBio(e.target.value)}
+                        onChange={(e) => { setBio(e.target.value); if (user?.id) localStorage.setItem(`profile_${user.id}_bio`, e.target.value); }}
                         className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white w-full"
                         placeholder="Your bio"
                         rows={2}
@@ -400,20 +459,20 @@ const ProfilePage: React.FC = () => {
                 {[{
                   label: 'Sport',
                   value: sport,
-                  onChange: (v: string) => setSport(v)
+                  onChange: (v: string) => { setSport(v); if (user?.id) localStorage.setItem(`profile_${user.id}_sport`, v); }
                 }, {
                   label: 'Level',
                   value: level,
-                  onChange: (v: string) => setLevel(v)
+                  onChange: (v: string) => { setLevel(v); if (user?.id) localStorage.setItem(`profile_${user.id}_level`, v); }
                 }, {
                   label: 'Age',
                   value: age,
-                  onChange: (v: string) => setAge(v ? Number(v) : ''),
+                  onChange: (v: string) => { const val = v ? Number(v) : ''; setAge(val as any); if (user?.id) localStorage.setItem(`profile_${user.id}_age`, String(val)); },
                   type: 'number'
                 }, {
                   label: 'Country',
                   value: country,
-                  onChange: (v: string) => setCountry(v)
+                  onChange: (v: string) => { setCountry(v); if (user?.id) localStorage.setItem(`profile_${user.id}_country`, v); }
                 }].map((field, idx) => (
                   <div key={field.label} className="rounded-xl border border-gray-700/80 bg-gray-900/60 p-3 shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
                     <div className="text-gray-400 text-xs mb-1">{field.label}</div>
@@ -440,7 +499,7 @@ const ProfilePage: React.FC = () => {
                   {profileEditing ? (
                     <input
                       value={goalsText}
-                      onChange={(e)=>setGoalsText(e.target.value)}
+                      onChange={(e)=>{ setGoalsText(e.target.value); if (user?.id) localStorage.setItem(`profile_${user.id}_goals`, e.target.value); }}
                       placeholder="Comma separated goals"
                       className="w-full bg-gray-950/70 border border-gray-700 rounded-lg px-3 py-2 text-white"
                     />
@@ -458,7 +517,7 @@ const ProfilePage: React.FC = () => {
                   {profileEditing ? (
                     <textarea
                       value={aboutMe}
-                      onChange={(e)=>setAboutMe(e.target.value)}
+                      onChange={(e)=>{ setAboutMe(e.target.value); if (user?.id) localStorage.setItem(`profile_${user.id}_about`, e.target.value); }}
                       rows={3}
                       className="w-full bg-gray-950/70 border border-gray-700 rounded-lg px-3 py-2 text-white"
                     />
@@ -615,6 +674,17 @@ const ProfilePage: React.FC = () => {
 
                       {/* Hover red outline (locked or unlocked) */}
                       <div className="absolute inset-0 rounded-xl ring-1 ring-red-500/60 opacity-0 group-hover:opacity-100 pointer-events-none z-20" />
+
+                      {/* Checkmark badge for completed achievements */}
+                      {unlocked && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border border-white flex items-center justify-center z-30"
+                        >
+                          <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+                        </motion.div>
+                      )}
 
                       {/* Icon with hover motion */}
                       <div className="relative inline-flex">

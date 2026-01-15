@@ -78,13 +78,13 @@ export function useUserProgress(range: Range = '30d') {
   const [momentum, setMomentum] = useState<Momentum | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Listen for profile changes in localStorage
+  // Listen for profile changes in localStorage and daily task completions
   useEffect(() => {
     if (!user?.id) return;
     
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `profile_${user.id}`) {
-        // Profile was updated, trigger refresh
+      if (e.key === `profile_${user.id}` || (e.key && e.key.startsWith(`task_${user.id}_`)) || e.key === 'xp_updated') {
+        // Profile was updated or task was completed or XP was updated, trigger refresh
         setRefreshTrigger(prev => prev + 1);
       }
     };
@@ -232,6 +232,8 @@ export function useUserProgress(range: Range = '30d') {
           const key = formatDate(d);
           if (perDay[key] && perDay[key].length > 0) streak++; else break;
         }
+        // Ensure streak starts at 1 for first-day users
+        if (streak === 0) streak = 1;
 
   const nonNull = points.filter(p => p.wellbeing !== null) as Array<{date:string; wellbeing:number}>;
   // wellbeing stored as 1-10 scale; average across days with recorded scores only
@@ -384,6 +386,17 @@ export function useUserProgress(range: Range = '30d') {
                   xp = parsed.xp || 0;
                 }
               }
+              // Prefer the larger of Supabase and local XP to avoid UI reset when DB is behind
+              try {
+                const lp = localStorage.getItem(`profile_${user.id}`);
+                if (lp) {
+                  const parsed = JSON.parse(lp);
+                  const localXp = parsed.xp || 0;
+                  const beforeMax = xp;
+                  xp = Math.max(xp, localXp);
+                  console.log(`[useUserProgress] XP: Supabase=${beforeMax}, Local=${localXp}, Final=${xp}`);
+                }
+              } catch {}
             } catch (e) {
               // Fallback to localStorage on error
               const localProfile = localStorage.getItem(`profile_${user.id}`);
