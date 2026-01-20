@@ -16,7 +16,10 @@ interface DashboardScreenProps {
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ onNavigate }) => {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const displayName = (user?.user_metadata?.username as string) || user?.email || 'Athlete';
+  const displayName =
+    (user?.user_metadata?.username as string) ||
+    (user?.user_metadata?.display_name as string) ||
+    'Athlete';
   
   const [todaysCheckIn, setTodaysCheckIn] = useState<CheckInData | null>(null);
   const [recentCheckIns, setRecentCheckIns] = useState<CheckInData[]>([]);

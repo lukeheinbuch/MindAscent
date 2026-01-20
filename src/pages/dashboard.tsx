@@ -29,7 +29,13 @@ const DashboardContent: React.FC = () => {
   const router = useRouter();
   const { user } = useAuth();
   const { profile } = useProfile();
-  const displayName = (profile?.username || profile?.display_name || user?.email || 'Athlete') as string;
+  const displayName = (
+    profile?.username ||
+    profile?.display_name ||
+    (user?.user_metadata?.username as string) ||
+    (user?.user_metadata?.display_name as string) ||
+    'Athlete'
+  ) as string;
   const { error: pushToast } = useToast();
   const [selectedRange, setSelectedRange] = useState<Range>('30d');
   const { isLoading, error, kpis, chart } = useUserProgress(selectedRange);
@@ -128,13 +134,23 @@ const DashboardContent: React.FC = () => {
             <svg width="100%" height="100%" viewBox="0 0 1000 1400" preserveAspectRatio="none" className="block">
               <defs>
                 <filter id="dashGlow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#ff2a2a" flood-opacity="0.95"/>
-                  <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#ff4040" flood-opacity="0.75"/>
-                  <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#ff7a7a" flood-opacity="0.45"/>
+                  <feDropShadow dx="0" dy="0" stdDeviation="2.45" flood-color="#ff2a2a" flood-opacity="0.62"/>
+                  <feDropShadow dx="0" dy="0" stdDeviation="4.7" flood-color="#ff4040" flood-opacity="0.5"/>
+                  <feDropShadow dx="0" dy="0" stdDeviation="7.5" flood-color="#ff7a7a" flood-opacity="0.26"/>
                 </filter>
               </defs>
-              <rect x="1" y="1" width="998" height="1398" rx="24" ry="24" fill="none" stroke="rgba(239,68,68,0.18)" strokeWidth="2" />
-              <rect x="1" y="1" width="998" height="1398" rx="24" ry="24" fill="none" stroke="#ff3b3b" strokeWidth="5" strokeLinecap="round" filter="url(#dashGlow)" pathLength={1000} strokeDasharray="110 890" className="dash-page" />
+              <path
+                d="M 29 1 H 971 Q 999 1 999 29 V 1371 Q 999 1399 971 1399 H 29 Q 1 1399 1 1371 V 29 Q 1 1 29 1 Z"
+                fill="none"
+                stroke="#ff3b3b"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                filter="url(#dashGlow)"
+                pathLength={1000}
+                strokeDasharray="120 880"
+                className="dash-page"
+              />
             </svg>
           </div>
 

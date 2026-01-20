@@ -256,13 +256,30 @@ const ProfilePage: React.FC = () => {
   };
 
   const handleSaveProfile = () => {
-    if (typeof window !== 'undefined' && user?.id) {
-      // Save with user-scoped keys
-      localStorage.setItem(`profile_${user.id}_displayName`, displayName);
-      localStorage.setItem(`profile_${user.id}_bio`, bio);
-      if (avatarUrl) localStorage.setItem(`profile_${user.id}_avatar_url`, avatarUrl);
-    }
-    setEditing(false);
+    const run = async () => {
+      if (!user?.id) return;
+      // Save immediately to localStorage for fast UX
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`profile_${user.id}_displayName`, displayName);
+        localStorage.setItem(`profile_${user.id}_bio`, bio);
+        if (avatarUrl) localStorage.setItem(`profile_${user.id}_avatar_url`, avatarUrl);
+      }
+      // Persist to Supabase so data is available across devices
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            display_name: displayName || null,
+            about: bio || null,
+          })
+          .eq('id', user.id);
+      } catch (err) {
+        console.error('Save basic profile failed', err);
+      } finally {
+        setEditing(false);
+      }
+    };
+    run();
   };
 
   if (authLoading || loading || profileLoading) {
@@ -616,7 +633,7 @@ const ProfilePage: React.FC = () => {
                 <h3 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">Achievements <Award className="w-5 h-5 text-yellow-400" /></h3>
                 <span className="text-xs text-gray-400">Earn XP by unlocking milestones</span>
               </div>
-              <div className="grid grid-cols-5 grid-rows-4 gap-3 auto-rows-max">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 grid-rows-4 gap-4 auto-rows-max">
                 {ACHIEVEMENTS.slice(0,20).map(a => {
                   // Auto-unlock achievements based on actual KPI data
                   const unlocked = achievementState.unlocked.has(a.id) || 
@@ -657,7 +674,7 @@ const ProfilePage: React.FC = () => {
                   return (
                     <div
                       key={a.id}
-                      className={`group relative rounded-xl p-3 border transition-all duration-500 ease-out transform ${unlocked ? 'border-red-500/60 bg-gray-900/70 shadow-[0_0_18px_-2px_rgba(239,68,68,0.55)]' : 'border-gray-700 bg-gray-900/40'} hover:-translate-y-2 hover:scale-[1.04] hover:shadow-[0_22px_60px_rgba(239,68,68,0.30)] hover:border-red-500/60 hover:bg-gray-900/60`}
+                      className={`group relative rounded-xl p-3 sm:p-4 border transition-all duration-500 ease-out transform ${unlocked ? 'border-red-500/60 bg-gray-900/70 shadow-[0_0_18px_-2px_rgba(239,68,68,0.55)]' : 'border-gray-700 bg-gray-900/40'} hover:-translate-y-2 hover:scale-[1.04] hover:shadow-[0_22px_60px_rgba(239,68,68,0.30)] hover:border-red-500/60 hover:bg-gray-900/60`}
                     >
                       {/* Shimmer sweep */}
                       <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none z-0">
@@ -688,11 +705,11 @@ const ProfilePage: React.FC = () => {
 
                       {/* Icon with hover motion */}
                       <div className="relative inline-flex">
-                        <Icon className={`w-7 h-7 mb-2 relative transition-all duration-300 ${unlocked ? 'text-yellow-400 drop-shadow-[0_0_16px_rgba(251,191,36,0.65)]' : 'text-gray-500'} group-hover:translate-y-[-3px] group-hover:scale-125 group-hover:rotate-[2deg]`} />
+                        <Icon className={`w-6 h-6 sm:w-7 sm:h-7 mb-2 relative transition-all duration-300 ${unlocked ? 'text-yellow-400 drop-shadow-[0_0_16px_rgba(251,191,36,0.65)]' : 'text-gray-500'} group-hover:translate-y-[-3px] group-hover:scale-125 group-hover:rotate-[2deg]`} />
                       </div>
 
                       {/* Label with subtle glow on hover */}
-                      <div className={`text-[10px] font-semibold uppercase tracking-wide transition-all duration-300 ${unlocked ? 'text-yellow-300 group-hover:text-yellow-200' : 'text-gray-300 group-hover:text-white'} group-hover:tracking-wider`}>{a.label}</div>
+                      <div className={`text-[11px] sm:text-[10px] font-semibold uppercase tracking-wide transition-all duration-300 ${unlocked ? 'text-yellow-300 group-hover:text-yellow-200' : 'text-gray-300 group-hover:text-white'} group-hover:tracking-wider`}>{a.label}</div>
 
                       {/* Progress bar animates in */}
                       <div className={`mt-1 h-1.5 w-full rounded-full overflow-hidden ${unlocked ? 'bg-gray-800/60' : 'bg-gray-800'}`}>

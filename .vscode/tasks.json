@@ -18,6 +18,21 @@
 				"$tsc"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Dev server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev",
+				"--",
+				"-p",
+				"3000"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }

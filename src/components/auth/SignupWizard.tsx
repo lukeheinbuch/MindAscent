@@ -274,6 +274,35 @@ const SignupWizard: React.FC = () => {
         return; // stop here; user must confirm via email
       }
 
+      // Set SSR auth cookie so API routes can authenticate this user
+      try {
+        await fetch('/api/auth/callback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: 'SIGNED_IN', session })
+        });
+      } catch (e) {
+        console.warn('Failed to set server session cookie after signup', e);
+      }
+
+      // Cache profile values locally for immediate profile prefill
+      if (typeof window !== 'undefined' && session?.user?.id) {
+        const uid = session.user.id;
+        try {
+          localStorage.setItem(`profile_${uid}_displayName`, step1Data.username);
+          localStorage.setItem(`profile_${uid}_sport`, step2Data.sport);
+          localStorage.setItem(`profile_${uid}_level`, String(step2Data.level || ''));
+          localStorage.setItem(`profile_${uid}_age`, String(step2Data.age || ''));
+          localStorage.setItem(`profile_${uid}_country`, step2Data.country || '');
+          localStorage.setItem(`profile_${uid}_goals`, (step3Data.goals || []).join(', '));
+          localStorage.setItem(`profile_${uid}_about`, step3Data.about || '');
+          // Mirror about into the short header bio field
+          localStorage.setItem(`profile_${uid}_bio`, step3Data.about || '');
+        } catch (e) {
+          console.warn('Failed to cache profile fields after signup', e);
+        }
+      }
+
       // If session exists, upsert profile immediately then redirect
       try {
         const resp = await fetch('/api/supabase/ensure-profile', {
@@ -325,8 +354,21 @@ const SignupWizard: React.FC = () => {
           </button>
         </div>
         {confirmationPending && (
-          <div className="mb-6 p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg text-amber-300">
-            Please check {confirmationPending} to confirm your email. After confirming, return to the app and log in.
+          <div className="mb-6 space-y-3">
+            <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg text-green-300">
+              <p className="font-semibold mb-2">✓ Account Created Successfully!</p>
+              <p>Please check <strong>{confirmationPending}</strong> to confirm your email.</p>
+            </div>
+            <div className="p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg text-amber-300">
+              <p className="font-semibold mb-2">⚠ Email Not Received?</p>
+              <p className="text-sm">
+                Check your <strong>spam/junk folder</strong> – confirmation emails sometimes end up there. 
+                Add us to your contacts to ensure you receive future emails.
+              </p>
+            </div>
+            <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg text-blue-300 text-sm">
+              <p>Once you confirm your email, return here and log in to access your account.</p>
+            </div>
           </div>
         )}
         {/* Progress indicator */}

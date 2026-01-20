@@ -21,7 +21,7 @@ const Layout: React.FC<LayoutProps> = ({ title, children, fullScreen = false }) 
           <Navigation />
         </aside>
       )}
-      <main className={fullScreen ? 'flex-1 w-full' : 'flex-1 px-4 md:px-8 py-6'}>
+      <main className={fullScreen ? 'flex-1 w-full' : 'flex-1 px-4 md:px-8 pt-6 pb-24 md:pb-6'}>
         {!fullScreen && (
           <div className="md:hidden -mx-4 mb-4">
             <div className="px-4 py-3 border-b border-gray-800 bg-black/80 supports-[backdrop-filter]:bg-black/60 backdrop-blur">
@@ -40,6 +40,11 @@ const Layout: React.FC<LayoutProps> = ({ title, children, fullScreen = false }) 
         )}
         {children}
       </main>
+      {!fullScreen && (
+        <div className="md:hidden fixed bottom-0 inset-x-0 border-t border-gray-800 bg-black/90 supports-[backdrop-filter]:bg-black/70 backdrop-blur z-50">
+          <Navigation mobile />
+        </div>
+      )}
     </div>
   );
 };

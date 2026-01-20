@@ -48,24 +48,28 @@ const Navigation: React.FC<NavigationProps> = ({ mobile = false }) => {
 
   if (mobile) {
     return (
-      <nav className="px-4 py-2">
-        <div className="flex justify-around">
-          {navigationItems.slice(0, 6).map((item) => {
+      <nav className="px-3 py-2">
+        <div className="grid grid-cols-8 gap-x-2 gap-y-1">
+          {navigationItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = router.pathname === item.href;
-            
+
             return (
-              <Link key={item.name} href={item.href}>
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`col-span-2 ${index === 4 ? 'col-start-2' : ''}`}
+              >
                 <motion.div
                   whileTap={{ scale: 0.95 }}
-                  className={`flex flex-col items-center py-2 px-3 rounded-lg ${
-                    isActive 
-                      ? 'text-primary-500 bg-dark-400' 
+                  className={`flex flex-col items-center justify-center py-2 rounded-lg transition-colors ${
+                    isActive
+                      ? 'text-red-400 bg-gray-800/70'
                       : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
-                  <Icon size={20} />
-                  <span className="text-xs mt-1">{item.name}</span>
+                  <Icon size={18} />
+                  <span className="text-[11px] mt-1 leading-none">{item.name}</span>
                 </motion.div>
               </Link>
             );
