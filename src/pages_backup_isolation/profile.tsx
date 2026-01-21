@@ -304,22 +304,6 @@ const ProfilePage: React.FC = () => {
           <div className="relative overflow-hidden rounded-2xl border border-gray-700/70 bg-gradient-to-br from-gray-900/70 to-gray-800/60 p-6 mb-8 shadow-[0_20px_60px_rgba(239,68,68,0.15)]">
             <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-red-600/25 blur-3xl" />
             <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-red-500/10 blur-3xl" />
-            {/* Neon red moving dot/line tracing the border */}
-            <div className="pointer-events-none absolute inset-0 z-20">
-              <svg width="100%" height="100%" viewBox="0 0 1000 300" preserveAspectRatio="none" className="block">
-                <defs>
-                  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                    <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#ff2a2a" flood-opacity="0.95"/>
-                    <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#ff4040" flood-opacity="0.75"/>
-                    <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#ff7a7a" flood-opacity="0.45"/>
-                  </filter>
-                </defs>
-                {/* faint base border for path hint */}
-                <rect x="1" y="1" width="998" height="298" rx="18" ry="18" fill="none" stroke="rgba(239,68,68,0.15)" strokeWidth="2" />
-                {/* single moving tail with strong neon glow */}
-                <rect x="1" y="1" width="998" height="298" rx="18" ry="18" fill="none" stroke="#ff3b3b" strokeWidth="5" strokeLinecap="round" filter="url(#glow)" pathLength={1000} strokeDasharray="100 900" className="dash" />
-              </svg>
-            </div>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between relative">
               <div className="flex items-start md:items-center gap-4">
                 <div className="relative w-24 h-24 rounded-full bg-gradient-to-tr from-red-600 to-yellow-500 p-[2px] shadow-[0_10px_30px_rgba(239,68,68,0.35)]">

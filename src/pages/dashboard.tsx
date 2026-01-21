@@ -128,33 +128,7 @@ const DashboardContent: React.FC = () => {
         actions={null}
         titleNode={(<h1 className="text-3xl font-bold tracking-tight text-white">Welcome back, <span className="bg-gradient-to-r from-red-500 via-red-400 to-red-600 bg-clip-text text-transparent drop-shadow-[0_2px_8px_rgba(239,68,68,0.35)]">{displayName}</span>!</h1>)}
       >
-        {/* Neon red moving tracer around the whole page content */}
-        <div className="relative">
-          <div className="pointer-events-none absolute -inset-2 md:-inset-3 lg:-inset-4 z-10">
-            <svg width="100%" height="100%" viewBox="0 0 1000 1400" preserveAspectRatio="none" className="block">
-              <defs>
-                <filter id="dashGlow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feDropShadow dx="0" dy="0" stdDeviation="2.45" flood-color="#ff2a2a" flood-opacity="0.62"/>
-                  <feDropShadow dx="0" dy="0" stdDeviation="4.7" flood-color="#ff4040" flood-opacity="0.5"/>
-                  <feDropShadow dx="0" dy="0" stdDeviation="7.5" flood-color="#ff7a7a" flood-opacity="0.26"/>
-                </filter>
-              </defs>
-              <path
-                d="M 29 1 H 971 Q 999 1 999 29 V 1371 Q 999 1399 971 1399 H 29 Q 1 1399 1 1371 V 29 Q 1 1 29 1 Z"
-                fill="none"
-                stroke="#ff3b3b"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                filter="url(#dashGlow)"
-                pathLength={1000}
-                strokeDasharray="120 880"
-                className="dash-page"
-              />
-            </svg>
-          </div>
-
-          {/* Page content starts here */}
+        {/* Page content starts here */}
         {/* KPI Cards */}
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 mb-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
@@ -344,16 +318,6 @@ const DashboardContent: React.FC = () => {
           </motion.div>
         )}
 
-        </div>
-        <style jsx>{`
-          .dash-page {
-            animation: move-dash-page 9s linear infinite;
-          }
-          @keyframes move-dash-page {
-            0% { stroke-dashoffset: 0; }
-            100% { stroke-dashoffset: -1000; }
-          }
-        `}</style>
       </PageContainer>
     </Layout>
   );
