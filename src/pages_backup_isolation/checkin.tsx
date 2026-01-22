@@ -92,7 +92,7 @@ const CheckInPageContent: React.FC = () => {
 
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
-    if (value.length <= 120) {
+    if (value.length <= 500) {
       setFormData(prev => ({ ...prev, note: value }));
     }
   };
@@ -123,8 +123,8 @@ const CheckInPageContent: React.FC = () => {
     }
     
     // Validate note length
-    if (data.note && data.note.length > 120) {
-      errors.push('Note must be 120 characters or less');
+    if (data.note && data.note.length > 500) {
+      errors.push('Note must be 500 characters or less');
     }
     
     return errors;
