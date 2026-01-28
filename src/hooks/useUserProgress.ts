@@ -243,25 +243,22 @@ export function useUserProgress(range: Range = '30d') {
   const consistencyPercent = Math.round((nonNull.length / Math.max(1, points.length)) * 100);
   const consistencyStatus: Consistency['status'] = consistencyPercent >= 80 ? 'Great' : consistencyPercent >= 50 ? 'Good' : 'Needs attention';
 
-  // Calculate momentum: compare last 3 points (treating null as 0) vs previous 3 points
+  // Calculate momentum: compare last 3 actual check-ins vs the 3 right before them (skip missed days)
   let momentumData: Momentum = { direction: '→', label: 'Steady' };
-  if (points.length >= 2) {
-    const last3Points = points.slice(-3);
-    const prev3Points = points.length >= 6 ? points.slice(-6, -3) : [];
-    // Treat null as 0 for momentum calculation
-    const last3Values = last3Points.map(p => p.wellbeing ?? 0);
-    const prev3Values = prev3Points.map(p => p.wellbeing ?? 0);
-    if (last3Values.length > 0) {
-      const avgLast3 = last3Values.reduce((a, v) => a + v, 0) / last3Values.length;
-      const avgPrev3 = prev3Values.length > 0 ? prev3Values.reduce((a, v) => a + v, 0) / prev3Values.length : avgLast3;
-      const diff = avgLast3 - avgPrev3;
-      if (Math.abs(diff) < 0.5) {
-        momentumData = { direction: '→', label: 'Steady' };
-      } else if (diff > 0) {
-        momentumData = { direction: '↑', label: `Improving steadily` };
-      } else {
-        momentumData = { direction: '↓', label: `Declining over last 3 days` };
-      }
+  if (nonNull.length >= 3) {
+    const last3Points = nonNull.slice(-3);
+    const prev3Points = nonNull.length >= 6 ? nonNull.slice(-6, -3) : [];
+    const last3Values = last3Points.map(p => p.wellbeing);
+    const prev3Values = prev3Points.map(p => p.wellbeing);
+    const avgLast3 = last3Values.reduce((a, v) => a + v, 0) / last3Values.length;
+    const avgPrev3 = prev3Values.length > 0 ? prev3Values.reduce((a, v) => a + v, 0) / prev3Values.length : avgLast3;
+    const diff = avgLast3 - avgPrev3;
+    if (Math.abs(diff) < 0.5) {
+      momentumData = { direction: '→', label: 'Steady' };
+    } else if (diff > 0) {
+      momentumData = { direction: '↑', label: `Improving steadily` };
+    } else {
+      momentumData = { direction: '↓', label: `Declining over last 3 check-ins` };
     }
   }
 

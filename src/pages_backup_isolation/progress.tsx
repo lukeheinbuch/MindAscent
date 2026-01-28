@@ -56,7 +56,7 @@ const ProgressPageContent: React.FC = () => {
     return best;
   }, [series]);
 
-  // Identify suggested focus: lowest average metric in the last 7 days (excluding sleep)
+  // Identify suggested focus: lowest 7-day average metric (excluding sleep)
   const focusSuggestion = React.useMemo(() => {
     if (!series) return null;
     const keys: Array<{ key: keyof typeof series; label: string; tip: string; color: string }> = [
@@ -71,11 +71,10 @@ const ProgressPageContent: React.FC = () => {
     let worst: { label: string; value: number; tip: string; color: string } | null = null;
     for (const { key, label, tip, color } of keys) {
       const metricSeries = series[key] || [];
-      const last7 = metricSeries.slice(-7);
-      const arr = last7.map(p => p.value).filter((v): v is number => typeof v === 'number');
-      if (!arr.length) continue;
-      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
-      if (!worst || avg < worst.value) worst = { label, value: avg, tip, color };
+      const lastWithRolling = [...metricSeries].reverse().find(p => typeof p.rolling7 === 'number');
+      if (!lastWithRolling || typeof lastWithRolling.rolling7 !== 'number') continue;
+      const avg7 = lastWithRolling.rolling7;
+      if (!worst || avg7 < worst.value) worst = { label, value: avg7, tip, color };
     }
     return worst;
   }, [series]);

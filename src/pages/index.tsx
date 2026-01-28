@@ -409,7 +409,7 @@ const HomePage: React.FC = () => {
 					</div>
           
 					<div className="border-t border-gray-800 mt-8 pt-6 text-center text-gray-500 text-sm">
-						<p>&copy; 2025 MindAscent. All rights reserved.</p>
+						<p>&copy; 2026 MindAscent. All rights reserved.</p>
 					</div>
 				</div>
 			</footer>

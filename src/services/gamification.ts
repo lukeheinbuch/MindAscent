@@ -488,6 +488,9 @@ class GamificationService {
         if (last === today) return; // already credited today
         completedExercises[exerciseId] = today;
         localStorage.setItem(`completed_exercises_${userId}`, JSON.stringify(completedExercises));
+        const completionCountKey = `exercise_completion_count_${userId}`;
+        const currentCount = parseInt(localStorage.getItem(completionCountKey) || '0', 10) || 0;
+        localStorage.setItem(completionCountKey, String(currentCount + 1));
         await this.awardXP(userId, XP_REWARDS.EXERCISE_COMPLETION, 'exercise', 'Exercise completed', { exerciseId });
         return;
       }
@@ -577,13 +580,19 @@ class GamificationService {
       // Gather simple counts from existing local storage keys
       const today = new Date().toISOString().split('T')[0]; // reserved if needed
 
-      // Exercise completions count (unique exerciseId occurrences overall)
+      // Exercise completions count (total completions, not unique)
       let exerciseCount = 0;
       try {
-        const completedExercisesRaw = localStorage.getItem(`completed_exercises_${userId}`);
-        if (completedExercisesRaw) {
-          const obj = JSON.parse(completedExercisesRaw);
-          exerciseCount = Object.keys(obj).length; // counts distinct exercises ever completed at least once
+        const completionCountKey = `exercise_completion_count_${userId}`;
+        const storedCount = parseInt(localStorage.getItem(completionCountKey) || '0', 10);
+        if (!Number.isNaN(storedCount) && storedCount > 0) {
+          exerciseCount = storedCount;
+        } else {
+          const completedExercisesRaw = localStorage.getItem(`completed_exercises_${userId}`);
+          if (completedExercisesRaw) {
+            const obj = JSON.parse(completedExercisesRaw);
+            exerciseCount = Object.keys(obj).length; // fallback for legacy data
+          }
         }
       } catch { /* ignore */ }
 
@@ -596,11 +605,17 @@ class GamificationService {
         }
       } catch {}
 
-      // Resource views
+      // Resource views (total, not unique)
       let resourceViews = 0;
       try {
-        const resRaw = localStorage.getItem(`resource_access_${userId}`);
-        if (resRaw) { const obj = JSON.parse(resRaw); resourceViews = Object.keys(obj).length; }
+        const resourceCountKey = `resource_view_count_${userId}`;
+        const storedCount = parseInt(localStorage.getItem(resourceCountKey) || '0', 10);
+        if (!Number.isNaN(storedCount) && storedCount > 0) {
+          resourceViews = storedCount;
+        } else {
+          const resRaw = localStorage.getItem(`resource_access_${userId}`);
+          if (resRaw) { const obj = JSON.parse(resRaw); resourceViews = Object.keys(obj).length; }
+        }
       } catch {}
 
       // Education views
@@ -771,6 +786,9 @@ class GamificationService {
         if (accesses[resourceId] === today) return;
         accesses[resourceId] = today;
         localStorage.setItem(key, JSON.stringify(accesses));
+        const resourceCountKey = `resource_view_count_${userId}`;
+        const currentCount = parseInt(localStorage.getItem(resourceCountKey) || '0', 10) || 0;
+        localStorage.setItem(resourceCountKey, String(currentCount + 1));
         await this.awardXP(userId, XP_REWARDS.RESOURCE_VIEW, 'education', 'Resource viewed', { resourceId });
         return;
       }
