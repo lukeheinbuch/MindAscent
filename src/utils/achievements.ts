@@ -22,6 +22,13 @@ export function saveAchievementState(userId: string, state: UnlockedAchievements
   } catch {}
 }
 
+function notifyAchievementsUpdated() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('achievements_updated'));
+  } catch {}
+}
+
 // Check if achievement should be unlocked and return newly unlocked ones
 export async function checkAndUnlockAchievements(
   userId: string,
@@ -102,6 +109,7 @@ export async function checkAndUnlockAchievements(
   // Save updated state
   if (newlyUnlocked.length > 0) {
     saveAchievementState(userId, state);
+    notifyAchievementsUpdated();
   }
 
   return newlyUnlocked;

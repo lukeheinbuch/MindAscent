@@ -42,6 +42,7 @@ import { ACHIEVEMENTS, getRankMeta } from '@/services/gamification';
 import { useUserProgress } from '@/hooks/useUserProgress';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/lib/supabaseClient';
+import { checkAndUnlockAchievements } from '@/utils/achievements';
 
 const ProfilePage: React.FC = () => {
   const router = useRouter();
@@ -112,6 +113,37 @@ const ProfilePage: React.FC = () => {
   }, [user?.id]);
   const [savingProfile, setSavingProfile] = useState<boolean>(false);
 
+  const loadAchievements = async () => {
+    if (!user?.id) return;
+    const unlocked = new Set<string>();
+
+    // Local storage fallback (fast load)
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`ach_state_${user.id}`) || localStorage.getItem(`ach_state_${(user as any)?.uid}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          (parsed.unlocked || []).forEach((id: string) => unlocked.add(id));
+        }
+      } catch {}
+    }
+
+    // Supabase source of truth (cross-device)
+    try {
+      const { data, error } = await supabase
+        .from('achievements')
+        .select('achievement_id')
+        .eq('user_id', user.id);
+      if (!error && data) {
+        data.forEach((row: any) => unlocked.add(row.achievement_id));
+      }
+    } catch (err) {
+      console.error('Failed to load achievements from Supabase:', err);
+    }
+
+    setAchievementState({ unlocked });
+  };
+
   // Load from localStorage immediately on mount (before Supabase data arrives)
   useEffect(() => {
     if (!user?.id) return;
@@ -167,18 +199,36 @@ const ProfilePage: React.FC = () => {
       if (supaProfile?.about) setAboutMe(supaProfile.about);
     }
 
-    // Load unlocked achievements (from localStorage after being unlocked by API)
-    if (typeof window !== 'undefined' && user) {
-      try {
-        const raw = localStorage.getItem(`ach_state_${user.id || user.uid}`);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          setAchievementState({ unlocked: new Set(parsed.unlocked || []) });
-        }
-      } catch {}
+    // Load unlocked achievements (Supabase + local fallback)
+    if (user?.id) {
+      loadAchievements();
     }
     setLoading(false);
   }, [user, authLoading, router, supaProfile]);
+
+  // Refresh achievements when unlocks happen elsewhere in the app
+  useEffect(() => {
+    if (!user?.id) return;
+    const handler = () => loadAchievements();
+    window.addEventListener('achievements_updated', handler as EventListener);
+    return () => window.removeEventListener('achievements_updated', handler as EventListener);
+  }, [user?.id]);
+
+  // Ensure streak-based achievements are persisted once criteria are met
+  useEffect(() => {
+    if (!user?.id || !kpis) return;
+    const run = async () => {
+      try {
+        const newlyUnlocked = await checkAndUnlockAchievements(user.id, { checkinsStreak: kpis.streakDays });
+        if (newlyUnlocked.length > 0) {
+          await loadAchievements();
+        }
+      } catch (err) {
+        console.error('Failed to sync check-in achievements:', err);
+      }
+    };
+    run();
+  }, [user?.id, kpis?.streakDays]);
 
   const handleLogout = async () => {
     try {
